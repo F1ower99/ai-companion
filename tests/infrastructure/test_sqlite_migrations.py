@@ -1,9 +1,11 @@
 import sqlite3
-from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
 from companion.infrastructure.sqlite.migrations import LATEST_SCHEMA_VERSION, apply_migrations
+from companion.infrastructure.sqlite.database import SQLiteDatabase, default_database_path
+from companion.domain.errors import StorageError
 
 
 @pytest.fixture
@@ -146,3 +148,52 @@ def test_failed_migration_rolls_back_ddl_and_version(tmp_path):
         assert names == {"goals"}
     finally:
         connection.close()
+
+
+def test_default_database_path_uses_localappdata(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert default_database_path() == tmp_path / "AICompanion" / "companion.sqlite3"
+
+
+def test_default_database_path_falls_back_to_user_local(monkeypatch):
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    assert default_database_path() == Path.home() / "AppData" / "Local" / "AICompanion" / "companion.sqlite3"
+
+
+def test_connection_enables_foreign_keys_and_reopens(tmp_path):
+    db = SQLiteDatabase(tmp_path / "AICompanion" / "companion.sqlite3")
+    with db.connection() as first:
+        first.execute(
+            "INSERT INTO goals(id, name, priority, active, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("g1", "Study", 1, 1, "2026-09-24T00:00:00+00:00"),
+        )
+        assert first.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert first.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    with db.connection() as second:
+        assert second.execute(
+            "SELECT name FROM goals WHERE id = ?", ("g1",)
+        ).fetchone()["name"] == "Study"
+
+
+def test_connection_rolls_back_and_preserves_business_error(tmp_path):
+    db = SQLiteDatabase(tmp_path / "companion.sqlite3")
+    with pytest.raises(RuntimeError, match="business failure"):
+        with db.connection() as connection:
+            connection.execute(
+                "INSERT INTO goals(id, name, priority, active, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("g1", "Study", 1, 1, "2026-09-24T00:00:00+00:00"),
+            )
+            raise RuntimeError("business failure")
+    with db.connection() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM goals").fetchone()[0] == 0
+
+
+def test_database_open_error_is_sanitized(tmp_path):
+    path_is_a_directory = tmp_path / "not-a-file.sqlite3"
+    path_is_a_directory.mkdir()
+    db = SQLiteDatabase(path_is_a_directory)
+    with pytest.raises(StorageError) as error:
+        db.initialize()
+    assert str(path_is_a_directory) not in str(error.value)
