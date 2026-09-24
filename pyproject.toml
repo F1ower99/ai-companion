@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-companion"
+version = "0.1.0"
+description = "A local-first Windows AI companion with an animated desktop pet."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6-Essentials==6.11.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-qt>=4.4,<5",
+]
+voice = [
+    "PySide6-Addons==6.11.2",
+]
+
+[project.scripts]
+ai-companion = "companion.desktop.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"
