@@ -1,0 +1,148 @@
+import sqlite3
+from datetime import datetime, timezone
+
+import pytest
+
+from companion.infrastructure.sqlite.migrations import LATEST_SCHEMA_VERSION, apply_migrations
+
+
+@pytest.fixture
+def migrated_connection(tmp_path):
+    connection = sqlite3.connect(tmp_path / "companion.sqlite3")
+    connection.execute("PRAGMA foreign_keys = ON")
+    apply_migrations(connection)
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
+def add_goal(connection, goal_id="g1"):
+    connection.execute(
+        "INSERT INTO goals(id, name, target, priority, active, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (goal_id, "Study", None, 1, 1, "2026-09-24T00:00:00+00:00"),
+    )
+
+
+def add_task(connection, task_id="t1", goal_id="g1"):
+    connection.execute(
+        "INSERT INTO tasks(id, title, goal_id, due_date, planned_minutes, "
+        "completed_units, target_units, priority, hard_start, hard_end, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            task_id, "Read", goal_id, "2026-09-24", 30, 0, None, 1,
+            None, None, "open", "2026-09-24T00:00:00+00:00",
+        ),
+    )
+
+
+def test_version_one_creates_all_tables_and_records_version(migrated_connection):
+    names = {
+        row[0]
+        for row in migrated_connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    assert {
+        "goals", "tasks", "memories", "conversations", "messages",
+        "settings", "reminders", "schema_migrations",
+    } <= names
+    assert migrated_connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 1
+    assert LATEST_SCHEMA_VERSION == 1
+
+
+def test_migration_is_idempotent(migrated_connection):
+    apply_migrations(migrated_connection)
+    assert migrated_connection.execute(
+        "SELECT COUNT(*) FROM schema_migrations WHERE version = 1"
+    ).fetchone()[0] == 1
+
+
+@pytest.mark.parametrize(
+    "sql, parameters",
+    [
+        (
+            "INSERT INTO goals(id, name, priority, active, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("g2", "Bad priority", 3, 1, "2026-09-24T00:00:00+00:00"),
+        ),
+        (
+            "INSERT INTO goals(id, name, priority, active, created_at) VALUES (?, ?, ?, ?, ?)",
+            ("g2", " ", 1, 1, "2026-09-24T00:00:00+00:00"),
+        ),
+    ],
+)
+def test_goal_check_constraints_reject_invalid_rows(migrated_connection, sql, parameters):
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_connection.execute(sql, parameters)
+
+
+def test_task_check_constraints_and_goal_foreign_key(migrated_connection):
+    add_goal(migrated_connection)
+    with pytest.raises(sqlite3.IntegrityError):
+        add_task(migrated_connection, goal_id="missing")
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_connection.execute(
+            "INSERT INTO tasks(id, title, goal_id, due_date, planned_minutes, completed_units, "
+            "target_units, priority, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("bad", "Bad", "g1", "2026-09-24", -1, 0, 1, 1, "open", "now"),
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_connection.execute(
+            "INSERT INTO tasks(id, title, goal_id, due_date, planned_minutes, completed_units, "
+            "target_units, priority, hard_start, hard_end, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "bad-time", "Bad", "g1", "2026-09-24", 1, 0, 1, 1,
+                "2026-09-24T12:00:00+00:00", "2026-09-24T11:00:00+00:00",
+                "open", "2026-09-24T00:00:00+00:00",
+            ),
+        )
+
+
+def test_goal_delete_is_restricted_while_task_exists(migrated_connection):
+    add_goal(migrated_connection)
+    add_task(migrated_connection)
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_connection.execute("DELETE FROM goals WHERE id = ?", ("g1",))
+
+
+def test_message_delete_cascades_with_conversation(migrated_connection):
+    migrated_connection.execute(
+        "INSERT INTO conversations(id, created_at, updated_at) VALUES (?, ?, ?)",
+        ("c1", "2026-09-24T00:00:00+00:00", "2026-09-24T00:00:00+00:00"),
+    )
+    migrated_connection.execute(
+        "INSERT INTO messages(id, conversation_id, role, content, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("m1", "c1", "user", "hello", "2026-09-24T00:00:00+00:00"),
+    )
+    migrated_connection.execute("DELETE FROM conversations WHERE id = ?", ("c1",))
+    assert migrated_connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("key", ["API_KEY", "model.token", "mySecret", "PASSWORD"])
+def test_settings_reject_credential_key_names(migrated_connection, key):
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_connection.execute(
+            "INSERT INTO settings(key, value, updated_at) VALUES (?, ?, ?)",
+            (key, "redacted", "2026-09-24T00:00:00+00:00"),
+        )
+
+
+def test_failed_migration_rolls_back_ddl_and_version(tmp_path):
+    connection = sqlite3.connect(tmp_path / "broken.sqlite3")
+    connection.execute("CREATE TABLE goals (id TEXT)")
+    connection.commit()
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            apply_migrations(connection)
+        names = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        assert names == {"goals"}
+    finally:
+        connection.close()
