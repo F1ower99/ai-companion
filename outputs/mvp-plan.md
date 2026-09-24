@@ -53,26 +53,31 @@
 - [x] 运行 `python -m pytest -q` 和计时关闭的 offscreen 应用启动冒烟；检查启动无异常、聊天窗可开关、退出后进程结束。
 - [x] 记录 milestone 1 的运行方式、测试结果与当前限制。
 
-### 阶段 2：SQLite、目标、任务和基础记忆
+### 阶段 2：SQLite、目标、任务和基础记忆（已完成）
 
-**文件：**
+**交付文件：**
 
-- 新建 `src/companion/domain/models.py`、`memory.py`、`application/task_service.py`。
-- 新建 `src/companion/infrastructure/sqlite/database.py`、`migrations.py`、`repositories.py`。
-- 新建 `tests/domain/test_task_service.py`、`tests/infrastructure/test_sqlite_repositories.py`。
+- `src/companion/domain/models.py` 和 `errors.py`：不可变的 Goal、Task、Memory、筛选对象及校验。
+- `src/companion/ports/repositories.py`：目标、任务和记忆仓储 Protocol。
+- `src/companion/application/task_service.py`：目标和任务用例。
+- `src/companion/infrastructure/sqlite/database.py`、`migrations.py`、`repositories.py`：本地路径、事务、迁移及持久化实现。
+- `src/companion/desktop/tasks_dialog.py`：今日任务界面；`chat_window.py` 和 `app.py` 提供入口、装配与存储故障降级。
+- 领域、仓储、迁移、UI 和应用生命周期测试。
 
-**接口：**
+**已交付接口：**
 
-- `Task(id: str, title: str, goal_id: str, due_date: date, planned_minutes: int, priority: Priority, completed_units: int = 0, target_units: int | None = None, hard_start: datetime | None = None, hard_end: datetime | None = None)`。
-- `TaskRepository.add(task) -> None`，`get(task_id) -> Task | None`，`list_for_day(day) -> list[Task]`，`mark_completed(task_id) -> None`。
-- `MemoryRepository.add(memory) -> None`，`search(query: MemoryQuery, limit: int = 5) -> list[Memory]`，`delete(memory_id) -> None`。
-- `TaskService.complete_units(task_id, count: int) -> Task`：拒绝负数并把完成量限制到 target。
+- `GoalRepository` 支持新增、读取、列出启用目标和删除；存在关联任务时拒绝删除。
+- `TaskRepository` 支持新增、读取、按日稳定排序、更新进度及标记完成；两种完成操作返回更新后的 Task。
+- `MemoryRepository.search(query, limit=5)` 支持文本、类别、来源、过期筛选及按重要性/新近程度排序。
+- `TaskService.complete_units(task_id, count)` 只接受正增量并将进度封顶；目标必须存在且启用。
+- schema version 1 创建七张路线图业务表和 `schema_migrations` 元数据表。
 
-- [ ] 写任务完成量、目标隔离、记忆类别筛选和删除的失败测试。
-- [ ] 建立 schema version 1，迁移创建 goals/tasks/memories/conversations/messages/settings/reminders 表和外键。
-- [ ] 实现 SQLite repository，所有写入使用事务；列表固定按优先级、deadline、创建顺序排序。
-- [ ] 运行 `python -m pytest tests/domain tests/infrastructure -q`；重启新 connection 后确认写入仍存在。
-- [ ] 增加聊天 UI 的任务列表入口，仅调用 TaskService，不把 SQL 写在 UI。
+- [x] 为领域对象和服务写入输入边界、进度封顶、关联目标和相邻任务隔离测试。
+- [x] 建立版本化 SQLite 迁移，覆盖七张业务表、约束、外键、级联删除及迁移失败回滚。
+- [x] 实现本地数据库路径、外键启用、事务、目标/任务/记忆仓储与稳定排序。
+- [x] 通过重新打开数据库连接验证数据持久化，并验证记忆筛选、过期排除、limit 和按 id 删除。
+- [x] 增加“今日任务”界面、添加/完成/进度操作、应用装配及存储不可用降级。
+- [x] 运行 `python -m pytest -q`：85 项通过；`compileall` 和 `pip check` 通过。
 
 ### 阶段 3：Windows 活动感知
 
@@ -188,4 +193,4 @@
 
 ## 当前阶段边界
 
-阶段 1 已交付桌宠运行壳与可运行方式：全量测试 10 项通过，依赖和语法检查通过，计时关闭的 offscreen 启动冒烟通过，独立审阅没有遗留问题。原生 Windows 鼠标穿透、托盘恢复和焦点行为仍需手工实机验收。聊天 UI 尚未接入模型；阶段 2–7 未完成，因此整体 MVP 尚未验收通过。
+阶段 1 的桌宠运行壳与阶段 2 的本地 SQLite、目标/任务/基础记忆和“今日任务”界面均已交付。阶段 2 全量测试 85 项通过，语法与依赖检查通过。会话、设置和提醒表目前只是 schema；活动监测、模型对话、提醒调度、语音、云同步和语义记忆尚未实现。原生 Windows 鼠标穿透、托盘恢复和焦点行为仍需手工实机验收，整体 MVP 尚未验收通过。
