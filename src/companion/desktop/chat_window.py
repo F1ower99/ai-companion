@@ -77,6 +77,8 @@ class ChatWindow(QDialog):
             return
         if self.tasks_dialog is None:
             self.tasks_dialog = TodayTasksDialog(self.task_service)
+        else:
+            self.tasks_dialog.refresh()
         self.tasks_dialog.show()
         self.tasks_dialog.raise_()
         self.tasks_dialog.activateWindow()

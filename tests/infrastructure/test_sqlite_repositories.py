@@ -182,6 +182,22 @@ def test_task_progress_rejects_invalid_value_and_unknown_task(repositories):
         tasks.set_completed_units("missing", 1)
 
 
+def test_task_progress_increment_is_atomic_and_clamped(repositories):
+    goals, tasks, _ = repositories
+    goals.add(make_goal())
+    tasks.add(make_task(target_units=3))
+    tasks.add(make_task(task_id="without-target"))
+
+    assert tasks.increment_completed_units("task-1", 2).completed_units == 2
+    assert tasks.increment_completed_units("task-1", 5).completed_units == 3
+    with pytest.raises(ValidationError):
+        tasks.increment_completed_units("without-target", 1)
+    with pytest.raises(NotFoundError):
+        tasks.increment_completed_units("missing", 1)
+    with pytest.raises(ValidationError):
+        tasks.increment_completed_units("task-1", 0)
+
+
 def test_mark_completed_fills_unit_target(repositories):
     goals, tasks, _ = repositories
     goals.add(make_goal())

@@ -1,6 +1,6 @@
 from datetime import date
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from companion.domain.errors import StorageError, ValidationError
 from companion.domain.models import Priority, Task, TaskStatus
 
 
@@ -22,7 +23,8 @@ class TodayTasksDialog(QDialog):
     def __init__(self, task_service, today: date | None = None) -> None:
         super().__init__()
         self.task_service = task_service
-        self.today = today or date.today()
+        self._uses_live_date = today is None
+        self.today = today if today is not None else date.today()
         self.setWindowTitle("今日任务")
         self.resize(460, 560)
 
@@ -133,22 +135,56 @@ class TodayTasksDialog(QDialog):
             "QLabel#tasksDate, QLabel#taskStatus { color: #607270; }"
         )
         self.refresh()
+        self._day_timer = QTimer(self)
+        self._day_timer.setInterval(60_000)
+        self._day_timer.timeout.connect(self._refresh_today_if_changed)
+        if self._uses_live_date:
+            self._day_timer.start()
 
     def _toggle_goal_form(self) -> None:
         self.goal_form.setVisible(not self.goal_form.isVisible())
 
-    def _show_error(self) -> None:
-        self.status_label.setText("本地任务暂时不可用，请检查后重试。")
+    def _show_error(self, error: Exception) -> None:
+        if isinstance(error, ValidationError):
+            message = "请检查填写内容后重试。"
+        elif isinstance(error, StorageError):
+            message = "本地任务暂时不可用，请检查后重试。"
+        else:
+            message = "操作未能完成，请重试。"
+        self.status_label.setText(message)
 
-    def refresh(self, selected_goal_id: str | None = None) -> None:
+    def _refresh_today_if_changed(self) -> None:
+        if not self._uses_live_date:
+            return
+        current_day = date.today()
+        if current_day != self.today:
+            self.refresh(
+                selected_goal_id=self.goal_combo.currentData(),
+                today=current_day,
+            )
+
+    def refresh(
+        self,
+        selected_goal_id: str | None = None,
+        today: date | None = None,
+    ) -> None:
+        if selected_goal_id is None:
+            selected_goal_id = self.goal_combo.currentData()
+        if today is not None:
+            self.today = today
+        elif self._uses_live_date:
+            self.today = date.today()
+        if today is not None or self._uses_live_date:
+            self.storage_hint.setText(self.today.strftime("%Y年%m月%d日"))
+        self.status_label.clear()
         self.refresh_goals(selected_goal_id)
         self.refresh_tasks()
 
     def refresh_goals(self, selected_goal_id: str | None = None) -> None:
         try:
             goals = self.task_service.list_active_goals()
-        except Exception:
-            self._show_error()
+        except Exception as error:
+            self._show_error(error)
             goals = []
         self.goal_combo.clear()
         for goal in goals:
@@ -167,8 +203,8 @@ class TodayTasksDialog(QDialog):
         self.task_list.clear()
         try:
             tasks = self.task_service.list_for_day(self.today)
-        except Exception:
-            self._show_error()
+        except Exception as error:
+            self._show_error(error)
             tasks = []
         for task in tasks:
             status = "已完成" if task.status is TaskStatus.COMPLETED else "待完成"
@@ -199,10 +235,11 @@ class TodayTasksDialog(QDialog):
             self.goal_name_input.clear()
             self.goal_target_input.clear()
             self.status_label.setText("目标已保存。")
-        except Exception:
-            self._show_error()
+        except Exception as error:
+            self._show_error(error)
 
     def add_task(self) -> None:
+        self._refresh_today_if_changed()
         goal_id = self.goal_combo.currentData()
         if goal_id is None:
             self.goal_hint_label.show()
@@ -218,14 +255,15 @@ class TodayTasksDialog(QDialog):
             )
             self.status_label.setText("任务已添加。")
             self.refresh_tasks()
-        except Exception:
-            self._show_error()
+        except Exception as error:
+            self._show_error(error)
 
     def _selected_task_id(self) -> str | None:
         item = self.task_list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
 
     def complete_selected(self) -> None:
+        self._refresh_today_if_changed()
         task_id = self._selected_task_id()
         if task_id is None:
             self.status_label.setText("请先选择一项任务。")
@@ -234,10 +272,11 @@ class TodayTasksDialog(QDialog):
             self.task_service.mark_completed(task_id)
             self.status_label.setText("任务已完成。")
             self.refresh_tasks()
-        except Exception:
-            self._show_error()
+        except Exception as error:
+            self._show_error(error)
 
     def record_progress(self) -> None:
+        self._refresh_today_if_changed()
         task_id = self._selected_task_id()
         if task_id is None:
             self.status_label.setText("请先选择一项任务。")
@@ -246,5 +285,5 @@ class TodayTasksDialog(QDialog):
             self.task_service.complete_units(task_id, self.progress_input.value())
             self.status_label.setText("进度已记录。")
             self.refresh_tasks()
-        except Exception:
-            self._show_error()
+        except Exception as error:
+            self._show_error(error)

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import uuid4
 
-from companion.domain.errors import NotFoundError, ValidationError
+from companion.domain.errors import ValidationError
 from companion.domain.models import Goal, Priority, Task, utc_now
 from companion.ports.repositories import GoalRepository, TaskRepository
 
@@ -67,13 +67,7 @@ class TaskService:
     def complete_units(self, task_id: str, count: int) -> Task:
         if type(count) is not int or count <= 0:
             raise ValidationError("Progress increment must be a positive integer.")
-        task = self.tasks.get(task_id)
-        if task is None:
-            raise NotFoundError("Task not found.")
-        if task.target_units is None:
-            raise ValidationError("This task has no unit target.")
-        value = min(task.completed_units + count, task.target_units)
-        return self.tasks.set_completed_units(task_id, value)
+        return self.tasks.increment_completed_units(task_id, count)
 
     def mark_completed(self, task_id: str) -> Task:
         return self.tasks.mark_completed(task_id)

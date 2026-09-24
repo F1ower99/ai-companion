@@ -163,4 +163,3 @@ class MemoryQuery:
             raise ValidationError("Memory query source must be text or None.")
         if not isinstance(self.include_expired, bool):
             raise ValidationError("include_expired must be a boolean.")
-

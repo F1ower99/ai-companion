@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import companion.infrastructure.sqlite.migrations as migrations_module
 from companion.infrastructure.sqlite.migrations import LATEST_SCHEMA_VERSION, apply_migrations
 from companion.infrastructure.sqlite.database import SQLiteDatabase, default_database_path
 from companion.domain.errors import StorageError
@@ -132,11 +133,26 @@ def test_settings_reject_credential_key_names(migrated_connection, key):
         )
 
 
-def test_failed_migration_rolls_back_ddl_and_version(tmp_path):
+def test_failed_migration_rolls_back_ddl_and_version(tmp_path, monkeypatch):
     connection = sqlite3.connect(tmp_path / "broken.sqlite3")
-    connection.execute("CREATE TABLE goals (id TEXT)")
+    connection.execute("CREATE TABLE legacy (id TEXT PRIMARY KEY, value TEXT)")
+    connection.execute("INSERT INTO legacy VALUES (?, ?)", ("existing", "preserved"))
     connection.commit()
     try:
+        monkeypatch.setattr(
+            migrations_module,
+            "MIGRATIONS",
+            (
+                (
+                    1,
+                    (
+                        migrations_module.CREATE_GOALS,
+                        migrations_module.CREATE_TASKS,
+                        "CREATE TABLE incomplete (",
+                    ),
+                ),
+            ),
+        )
         with pytest.raises(sqlite3.OperationalError):
             apply_migrations(connection)
         names = {
@@ -145,7 +161,8 @@ def test_failed_migration_rolls_back_ddl_and_version(tmp_path):
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-        assert names == {"goals"}
+        assert names == {"legacy"}
+        assert connection.execute("SELECT * FROM legacy").fetchall() == [("existing", "preserved")]
     finally:
         connection.close()
 

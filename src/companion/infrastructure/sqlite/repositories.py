@@ -151,6 +151,25 @@ class SQLiteTaskRepository:
             )
             return updated
 
+    def increment_completed_units(self, task_id: str, count: int) -> Task:
+        if type(count) is not int or count <= 0:
+            raise ValidationError("Progress increment must be a positive integer.")
+        with self.database.connection() as connection:
+            cursor = connection.execute(
+                "UPDATE tasks SET completed_units = MIN(completed_units + ?, target_units) "
+                "WHERE id = ? AND target_units IS NOT NULL",
+                (count, task_id),
+            )
+            if cursor.rowcount == 0:
+                row = connection.execute(
+                    "SELECT target_units FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("Task not found.")
+                raise ValidationError("This task has no unit target.")
+            row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+            return _task_from_row(row)
+
     def mark_completed(self, task_id: str) -> Task:
         with self.database.connection() as connection:
             row = connection.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()

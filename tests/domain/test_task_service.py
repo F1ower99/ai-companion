@@ -1,11 +1,18 @@
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
+from threading import Barrier
 
 import pytest
 
 from companion.domain.errors import NotFoundError, ValidationError
 from companion.domain.models import Goal, Priority, Task, TaskStatus
 from companion.application.task_service import TaskService
+from companion.infrastructure.sqlite.database import SQLiteDatabase
+from companion.infrastructure.sqlite.repositories import (
+    SQLiteGoalRepository,
+    SQLiteTaskRepository,
+)
 
 
 class FakeGoalRepository:
@@ -43,6 +50,16 @@ class FakeTaskRepository:
         updated = replace(self.items[task_id], completed_units=value)
         self.items[task_id] = updated
         return updated
+
+    def increment_completed_units(self, task_id, count):
+        task = self.items.get(task_id)
+        if task is None:
+            raise NotFoundError("Task not found.")
+        if task.target_units is None:
+            raise ValidationError("This task has no unit target.")
+        return self.set_completed_units(
+            task_id, min(task.completed_units + count, task.target_units)
+        )
 
     def mark_completed(self, task_id):
         task = self.items[task_id]
@@ -159,6 +176,41 @@ def test_complete_units_clamps_to_target_and_isolates_other_tasks(service):
 def test_complete_units_unknown_task_raises_not_found(service):
     with pytest.raises(NotFoundError):
         service.complete_units("missing", 1)
+
+
+def test_concurrent_unit_increments_do_not_lose_progress(tmp_path):
+    database = SQLiteDatabase(tmp_path / "companion.sqlite3")
+    database.initialize()
+    goals = SQLiteGoalRepository(database)
+    stored_tasks = SQLiteTaskRepository(database)
+    goals.add(make_goal())
+    task = replace(make_task("task-1"), target_units=10)
+    stored_tasks.add(task)
+
+    read_barrier = Barrier(2)
+
+    class SynchronizedTaskRepository:
+        def __init__(self, repository):
+            self.repository = repository
+
+        def get(self, task_id):
+            task = self.repository.get(task_id)
+            read_barrier.wait(timeout=5)
+            return task
+
+        def __getattr__(self, name):
+            return getattr(self.repository, name)
+
+    service = TaskService(goals, SynchronizedTaskRepository(stored_tasks))
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        futures = [
+            workers.submit(service.complete_units, task.id, 1)
+            for _ in range(2)
+        ]
+        for future in futures:
+            future.result(timeout=8)
+
+    assert stored_tasks.get(task.id).completed_units == 2
 
 
 def test_mark_completed_fills_quantity_target_and_completes_normal_task(service):

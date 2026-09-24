@@ -10,6 +10,8 @@ from tempfile import TemporaryDirectory
 def run_shell_script(code):
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
+    source_root = str(Path(__file__).resolve().parents[2] / "src")
+    env["PYTHONPATH"] = source_root + os.pathsep + env.get("PYTHONPATH", "")
     with TemporaryDirectory() as local_app_data:
         env["LOCALAPPDATA"] = local_app_data
         return subprocess.run(
@@ -20,6 +22,16 @@ def run_shell_script(code):
             timeout=4,
             check=False,
         )
+
+
+def test_lifecycle_subprocess_imports_companion_from_this_checkout():
+    result = run_shell_script(
+        "from companion.desktop import app; print(app.__file__)"
+    )
+
+    expected_source_root = Path(__file__).resolve().parents[2] / "src"
+    assert result.returncode == 0, result.stderr
+    assert Path(result.stdout.strip()).resolve().is_relative_to(expected_source_root.resolve())
 
 
 def test_app_event_loop_exits_when_pet_closes_without_system_tray():

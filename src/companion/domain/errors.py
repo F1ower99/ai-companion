@@ -8,4 +8,3 @@ class NotFoundError(LookupError):
 
 class StorageError(RuntimeError):
     """Local storage is unavailable or could not complete an operation."""
-
