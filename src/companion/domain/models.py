@@ -77,6 +77,7 @@ class Task:
     priority: Priority
     completed_units: int = 0
     target_units: int | None = None
+    planned_start_at: datetime | None = None
     hard_start: datetime | None = None
     hard_end: datetime | None = None
     status: TaskStatus = TaskStatus.OPEN
@@ -108,8 +109,10 @@ class Task:
             object.__setattr__(self, "status", TaskStatus(self.status))
         except (TypeError, ValueError) as error:
             raise ValidationError("Task status must be open or completed.") from error
+        planned_start = _require_aware_utc(self.planned_start_at, "planned_start_at")
         start = _require_aware_utc(self.hard_start, "hard_start")
         end = _require_aware_utc(self.hard_end, "hard_end")
+        object.__setattr__(self, "planned_start_at", planned_start)
         object.__setattr__(self, "hard_start", start)
         object.__setattr__(self, "hard_end", end)
         if start is not None and end is not None and end < start:

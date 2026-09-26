@@ -79,26 +79,36 @@
 - [x] 增加“今日任务”界面、添加/完成/进度操作、应用装配及存储不可用降级。
 - [x] 运行 `python -m pytest -q`：85 项通过；`compileall` 和 `pip check` 通过。
 
-### 阶段 3：Windows 活动感知
+### 阶段 3：主动决策与提醒引擎（已完成）
 
-**文件：**
+**设计与实现：**
 
-- 新建 `src/companion/ports/activity.py`、`src/companion/adapters/windows/foreground.py`、`idle.py`、`activity_monitor.py`。
-- 新建 `src/companion/application/activity_service.py`。
-- 新建 `tests/adapters/test_activity_monitor.py` 和 Windows API mock 测试。
+- 规格：[`2026-09-24-stage-3-proactive-decision-design.md`](../docs/superpowers/specs/2026-09-24-stage-3-proactive-decision-design.md)。
+- 计划：[`2026-09-26-stage-3-proactive-decision.md`](../docs/superpowers/plans/2026-09-26-stage-3-proactive-decision.md)。
+- `src/companion/domain/decisions.py` 提供无 Qt、SQLite、网络和系统时钟依赖的确定性 decision engine。
+- `src/companion/ports/clock.py`、`infrastructure/system_clock.py` 注入 UTC、本地日期、本地日界和安静时段；`ports/activity.py` 只定义粗粒度 idle/focused/unknown 接口。
+- schema v2 以追加迁移方式保存软计划时间、提醒状态、全局冷却、事件和提醒偏好；v1 `reminders` 占位表保持不变。
+- `application/proactive_reminder_service.py` 负责组装快照、提交提醒/用户动作并重新评估；`desktop/reminder_scheduler.py`、`reminder_card.py` 和 `reminder_settings_dialog.py` 只处理调度和展示。
+- Today Tasks 可选填写本地计划开始日期/时间；提醒卡提供“现在做、稍后、延长、今天跳过、已完成”和关闭动作。
 
-**接口：**
+**行为边界：**
 
-- `ActivitySnapshot(app_name: str | None, category: str | None, idle_seconds: int, observed_at: datetime)`。
-- `ActivitySource.snapshot() -> ActivitySnapshot`。
-- `ActivityMonitor.sample(snapshot, at) -> ActivitySessionDelta | None`；同应用合并连续片段，idle 超阈值、监测暂停、休眠恢复和进程切换时关闭当前片段。
-- 默认采样周期 5 秒；默认 idle 阈值 300 秒；设置可更改。
+- 规则涵盖 P0/P1/P2、Goal 启用状态、剩余数量估算、软计划宽限、hard_start/hard_end、晚间容量、全局/单任务冷却、稍后、每日一次延期和本地日跳过。
+- 默认提醒开启，安静时段 22:00–08:00；提醒开关和安静时段是绝对静默门控。
+- Stage 3 的活动来源默认为 `unknown`，不采集进程/窗口/键盘/屏幕信息；普通提醒在未知活动时保持安静，只有满足可完成条件的 P0 近截止任务可显示无声音非模态卡片。
+- 延期不会改写硬截止；到期后重新读取任务进度和活动快照，完整运行 decision engine。
 
-- [ ] 用假 ActivitySource 写切换应用、unknown app、idle 到阈值、暂停/恢复的测试。
-- [ ] 通过 `GetForegroundWindow` 和 `GetWindowThreadProcessId` 获取 PID，通过进程 API 读取 exe basename；仅返回 basename，不读取窗口标题。
-- [ ] 通过 `GetLastInputInfo` 获取 session idle 秒数；API 失败返回明确 error 状态，不伪造有效活动。
-- [ ] 将 session 变更写入 activity_sessions，并以最小化的本地 UI 开关控制采样。
-- [ ] 运行 activity adapter 测试；Windows 上验证 VS Code 30 分钟模拟片段和 idle 分段。
+- [x] 添加时间、活动和提醒领域模型及可重复的规则 decision engine 测试。
+- [x] 增加 Clock/local-time resolver 和 TaskService 时间注入，覆盖本地日界及 DST 无效/歧义输入边界。
+- [x] 用 SQLite schema v2 追加计划时间和提醒持久化，覆盖迁移回滚、幂等键、事务原子性及重启读取。
+- [x] 实现提醒应用服务、动作生命周期、延期/稍后/跳过语义、错误降级与安全的 unknown activity 默认值。
+- [x] 接入紧凑设置入口、非模态提醒卡、60 秒调度器和任务计划日期/时间输入。
+- [x] 验收 19:30 计划不会机械弹出；20:10 连续专注 130 分钟后重评晚间任务；延期后重新加载进度/活动。
+- [x] 全量测试、compileall、pip check 和 Stage 独立提交通过；Windows 原生活动监测仍按隐私边界延期。
+
+### 阶段 3 之后延期：Windows 活动感知
+
+当前 `ActivitySource` 的正式默认实现返回 `unknown`。只有未来明确提供粗粒度、可暂停的状态来源后，普通 focused-task 提醒才会启用。此工作另立阶段，不读取窗口标题、键盘内容或屏幕画面。
 
 ### 阶段 4：任务计划和学期日历
 
@@ -140,25 +150,9 @@
 - [ ] 实现 Windows secret adapter；验证取回、覆盖、删除和日志无 secret。
 - [ ] 运行应用级测试；无 Key 时 UI 显示配置提示，不发网络请求。
 
-### 阶段 6：Agent 决策、提醒、延期协商
+### 阶段 6：Agent 决策、提醒、延期协商（旧计划已由阶段 3 取代）
 
-**文件：**
-
-- 新建 `src/companion/domain/decisions.py`、`application/agent_loop.py`、`reminder_service.py`。
-- 新建 `tests/domain/test_decisions.py`、`tests/application/test_agent_loop.py`、`test_reminder_service.py`。
-
-**接口：**
-
-- `InterventionContext(now, activity, tasks, recent_reminders, preferences, relevant_memories)`。
-- `Decision(kind: Literal['interrupt','wait','stay_silent'], reason_codes: tuple[str, ...], proposed_message: str | None)`。
-- `decide(context: InterventionContext) -> Decision` 为纯函数；基础阈值为 100 分钟后评估，120 分钟且高优先级任务未完成时提醒；30 分钟时不提醒。
-- `NegotiationService.request_extension(task_id: str, minutes: int, now: datetime) -> ExtensionResult`：不改 hard_end，延期到期时产生一次 ReminderEvent。
-
-- [ ] 写 acceptance 测试：专注应用使用 30 分钟静默；120 分钟且高优先级任务未完成时提醒；主要任务完成可继续；冷却期不重复提醒。
-- [ ] 写延期边界测试：剩余计划允许则接受 20 分钟；超过硬截止则拒绝或给出可选重排；二次 reminder 只发一次。
-- [ ] 实现规则型 Decision Service，LLM 只可润色已批准的通知文案，不影响 Decision.kind 或 deadline。
-- [ ] 连接桌宠 Warning 状态、聊天卡片、通知和用户的“暂停提醒/今天不再提醒”。
-- [ ] 运行完整测试并端到端演练 30 分钟静默、120 分钟提醒、20 分钟延期和到期复提醒。
+原计划中的 `InterventionContext`、基础阈值和 `NegotiationService` 已被阶段 3 的更完整确定性决策模型、提醒生命周期、持久化和 UI 取代，不再重复实现。进入本阶段编号前需根据阶段 4/5 的实际交付重新规划剩余 Companion/Agent 集成；LLM 仍不得决定基础调度、deadline、cooldown、snooze 或 extension。
 
 ### 阶段 7：基础语音、打包和首版验收
 
@@ -193,4 +187,4 @@
 
 ## 当前阶段边界
 
-阶段 1 的桌宠运行壳与阶段 2 的本地 SQLite、目标/任务/基础记忆和“今日任务”界面均已交付。阶段 2 全量测试 85 项通过，语法与依赖检查通过。会话、设置和提醒表目前只是 schema；活动监测、模型对话、提醒调度、语音、云同步和语义记忆尚未实现。原生 Windows 鼠标穿透、托盘恢复和焦点行为仍需手工实机验收，整体 MVP 尚未验收通过。
+阶段 1 桌面壳、阶段 2 本地数据基础和阶段 3 确定性主动决策/提醒闭环已交付。Stage 3 全量套件包含 200 项通过测试，compileall 和 pip check 通过；Windows 原生活动感知尚未接入，所以未知活动下普通提醒保持安静。下一阶段沿用原路线图中的阶段 4：任务计划和学期日历。LLM 对话、语音、打包、语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。

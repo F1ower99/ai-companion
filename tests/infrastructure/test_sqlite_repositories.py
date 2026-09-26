@@ -34,15 +34,18 @@ def make_task(
     hard_end=None,
     created_at=None,
     target_units=None,
+    due_date=date(2026, 9, 24),
+    planned_start_at=None,
 ):
     return Task(
         id=task_id,
         title=f"Task {task_id}",
         goal_id=goal_id,
-        due_date=date(2026, 9, 24),
+        due_date=due_date,
         planned_minutes=30,
         priority=priority,
         hard_end=hard_end,
+        planned_start_at=planned_start_at,
         created_at=created_at or datetime(2026, 9, 24, tzinfo=timezone.utc),
         target_units=target_units,
     )
@@ -160,6 +163,27 @@ def test_task_repository_requires_calendar_date_for_day_listing(repositories):
     _, tasks, _ = repositories
     with pytest.raises(ValidationError):
         tasks.list_for_day(datetime(2026, 9, 24, tzinfo=timezone.utc))
+
+
+def test_decision_listing_includes_overdue_and_today_plans_only(repositories):
+    goals, tasks, _ = repositories
+    goals.add(make_goal())
+    tasks.add(make_task(task_id="overdue", due_date=date(2026, 9, 25)))
+    tasks.add(make_task(
+        task_id="today-plan", due_date=date(2026, 9, 30),
+        planned_start_at=datetime(2026, 9, 26, 12, tzinfo=timezone.utc),
+    ))
+    tasks.add(make_task(
+        task_id="tomorrow-plan", due_date=date(2026, 9, 30),
+        planned_start_at=datetime(2026, 9, 26, 16, tzinfo=timezone.utc),
+    ))
+    tasks.add(make_task(task_id="future", due_date=date(2026, 9, 27)))
+    results = tasks.list_for_decisions(
+        date(2026, 9, 26),
+        datetime(2026, 9, 25, 16, tzinfo=timezone.utc),
+        datetime(2026, 9, 26, 16, tzinfo=timezone.utc),
+    )
+    assert {task.id for task in results} == {"overdue", "today-plan"}
 
 
 def test_task_progress_update_changes_only_requested_task(repositories):

@@ -1,5 +1,5 @@
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -231,9 +231,45 @@ def test_add_task_passes_selected_values_and_injected_day(qtbot):
             "due_date": today,
             "planned_minutes": 45,
             "priority": Priority.P0,
+            "planned_start_at": None,
             "target_units": 6,
         },
     )]
+
+
+def test_blank_planned_time_is_passed_as_none(qtbot):
+    service = FakeTaskService(goals=[make_goal()])
+    dialog = TodayTasksDialog(service, today=date(2026, 9, 26))
+    qtbot.addWidget(dialog)
+    dialog.title_input.setText("Vocabulary")
+    QTest.mouseClick(dialog.add_task_button, Qt.MouseButton.LeftButton)
+    assert service.calls[-1][1]["planned_start_at"] is None
+
+
+def test_planned_local_time_is_resolved_before_task_service_write(qtbot):
+    local_tz = timezone(timedelta(hours=8))
+
+    class FixedResolver:
+        def resolve_local(self, day, local_time):
+            return datetime.combine(day, local_time).replace(tzinfo=local_tz).astimezone(timezone.utc)
+
+    service = FakeTaskService(goals=[make_goal()])
+    dialog = TodayTasksDialog(
+        service, today=date(2026, 9, 26), clock=FixedResolver()
+    )
+    qtbot.addWidget(dialog)
+    dialog.title_input.setText("Vocabulary")
+    dialog.planned_start_enabled.setChecked(True)
+    dialog.planned_start_date_input.setDate(
+        dialog.planned_start_date_input.date().fromString("2026-09-26", "yyyy-MM-dd")
+    )
+    dialog.planned_start_time_input.setTime(
+        dialog.planned_start_time_input.time().fromString("19:30", "HH:mm")
+    )
+    QTest.mouseClick(dialog.add_task_button, Qt.MouseButton.LeftButton)
+    assert service.calls[-1][1]["planned_start_at"] == datetime(
+        2026, 9, 26, 11, 30, tzinfo=timezone.utc
+    )
 
 
 def test_create_goal_calls_task_service_and_selects_new_goal(qtbot):

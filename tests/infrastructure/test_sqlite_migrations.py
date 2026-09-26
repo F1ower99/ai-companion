@@ -40,7 +40,7 @@ def add_task(connection, task_id="t1", goal_id="g1"):
     )
 
 
-def test_version_one_creates_all_tables_and_records_version(migrated_connection):
+def test_latest_schema_creates_stage_two_and_reminder_tables(migrated_connection):
     names = {
         row[0]
         for row in migrated_connection.execute(
@@ -51,15 +51,78 @@ def test_version_one_creates_all_tables_and_records_version(migrated_connection)
         "goals", "tasks", "memories", "conversations", "messages",
         "settings", "reminders", "schema_migrations",
     } <= names
-    assert migrated_connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 1
-    assert LATEST_SCHEMA_VERSION == 1
+    assert {"task_reminder_state", "reminder_runtime_state", "reminder_events"} <= names
+    assert migrated_connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 2
+    assert LATEST_SCHEMA_VERSION == 2
 
 
 def test_migration_is_idempotent(migrated_connection):
     apply_migrations(migrated_connection)
     assert migrated_connection.execute(
-        "SELECT COUNT(*) FROM schema_migrations WHERE version = 1"
+        "SELECT COUNT(*) FROM schema_migrations WHERE version = 2"
     ).fetchone()[0] == 1
+
+
+def test_v1_data_upgrades_to_v2_with_null_planned_start_and_placeholder_preserved(tmp_path):
+    connection = sqlite3.connect(tmp_path / "v1.sqlite3")
+    connection.execute("PRAGMA foreign_keys = ON")
+    try:
+        connection.execute(migrations_module.CREATE_SCHEMA_MIGRATIONS_TABLE)
+        for statement in migrations_module.VERSION_ONE_STATEMENTS:
+            connection.execute(statement)
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, ?)",
+            ("2026-09-24T00:00:00+00:00",),
+        )
+        add_goal(connection)
+        add_task(connection)
+        connection.execute(
+            "INSERT INTO reminders(id, reason, created_at, cooldown_until, extension_deadline, status) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("legacy", "placeholder", "2026-09-24T00:00:00+00:00", "later", "later", "pending"),
+        )
+        connection.commit()
+        apply_migrations(connection)
+        assert migrations_module.read_schema_version(connection) == 2
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
+        assert "planned_start_at" in columns
+        assert connection.execute("SELECT planned_start_at FROM tasks WHERE id='t1'").fetchone()[0] is None
+        assert connection.execute("SELECT reason FROM reminders WHERE id='legacy'").fetchone()[0] == "placeholder"
+        names = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"task_reminder_state", "reminder_runtime_state", "reminder_events"} <= names
+    finally:
+        connection.close()
+
+
+def test_failed_v2_migration_rolls_back_to_v1(tmp_path, monkeypatch):
+    connection = sqlite3.connect(tmp_path / "v1-broken-upgrade.sqlite3")
+    try:
+        monkeypatch.setattr(migrations_module, "MIGRATIONS", ((1, migrations_module.VERSION_ONE_STATEMENTS),))
+        apply_migrations(connection)
+        monkeypatch.setattr(
+            migrations_module,
+            "MIGRATIONS",
+            (
+                (1, migrations_module.VERSION_ONE_STATEMENTS),
+                (2, ("ALTER TABLE tasks ADD COLUMN planned_start_at TEXT", "CREATE TABLE broken (")),
+            ),
+        )
+        with pytest.raises(sqlite3.OperationalError):
+            apply_migrations(connection)
+        assert migrations_module.read_schema_version(connection) == 1
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+        ).fetchone() is not None
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
+        assert "planned_start_at" not in columns
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='task_reminder_state'"
+        ).fetchone() is None
+    finally:
+        connection.close()
 
 
 @pytest.mark.parametrize(

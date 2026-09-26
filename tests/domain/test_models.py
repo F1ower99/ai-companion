@@ -111,6 +111,18 @@ def test_task_normalizes_aware_datetimes_to_utc():
     assert make_task(created_at=local_time).created_at == datetime(2026, 9, 24, tzinfo=timezone.utc)
 
 
+def test_task_normalizes_planned_start_to_utc():
+    local_time = datetime(2026, 9, 26, 19, 30, tzinfo=timezone(timedelta(hours=8)))
+    assert make_task(planned_start_at=local_time).planned_start_at == datetime(
+        2026, 9, 26, 11, 30, tzinfo=timezone.utc
+    )
+
+
+def test_task_rejects_naive_planned_start():
+    with pytest.raises(ValidationError):
+        make_task(planned_start_at=datetime(2026, 9, 26, 19, 30))
+
+
 def test_goal_and_memory_validate_priority_and_content():
     with pytest.raises(ValidationError):
         make_goal(priority=4)

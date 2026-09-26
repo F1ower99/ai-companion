@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 
-LATEST_SCHEMA_VERSION = 1
+LATEST_SCHEMA_VERSION = 2
 
 CREATE_SCHEMA_MIGRATIONS_TABLE = (
     "CREATE TABLE IF NOT EXISTS schema_migrations ("
@@ -99,7 +99,28 @@ VERSION_ONE_STATEMENTS = (
     *CREATE_TASK_INDEXES,
     *CREATE_MEMORY_INDEXES,
 )
-MIGRATIONS = ((1, VERSION_ONE_STATEMENTS),)
+VERSION_TWO_STATEMENTS = (
+    "ALTER TABLE tasks ADD COLUMN planned_start_at TEXT",
+    "CREATE TABLE task_reminder_state ("
+    "task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, "
+    "local_date TEXT NOT NULL, last_action TEXT, next_evaluate_at TEXT, "
+    "extension_count INTEGER NOT NULL DEFAULT 0 "
+    "CHECK(typeof(extension_count) = 'integer' AND extension_count IN (0, 1)), "
+    "last_shown_at TEXT, skipped_today INTEGER NOT NULL DEFAULT 0 "
+    "CHECK(typeof(skipped_today) = 'integer' AND skipped_today IN (0, 1)), "
+    "snooze_until TEXT, extension_until TEXT, PRIMARY KEY(task_id, local_date))",
+    "CREATE TABLE reminder_runtime_state ("
+    "id INTEGER PRIMARY KEY CHECK(id = 1), last_shown_at TEXT)",
+    "INSERT INTO reminder_runtime_state(id, last_shown_at) VALUES (1, NULL)",
+    "CREATE TABLE reminder_events ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL, "
+    "local_date TEXT NOT NULL, occurred_at TEXT NOT NULL, kind TEXT NOT NULL, "
+    "reason_code TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE)",
+    "CREATE INDEX idx_tasks_planned_start ON tasks(planned_start_at)",
+    "CREATE INDEX idx_reminder_events_local_date ON reminder_events(local_date, occurred_at)",
+)
+MIGRATIONS = ((1, VERSION_ONE_STATEMENTS), (2, VERSION_TWO_STATEMENTS))
 
 
 def read_schema_version(connection: sqlite3.Connection) -> int:

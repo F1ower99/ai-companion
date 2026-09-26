@@ -88,6 +88,11 @@ def make_task(task_id):
     )
 
 
+class FixedClock:
+    def now_utc(self):
+        return datetime(2026, 9, 24, 12, tzinfo=timezone.utc)
+
+
 @pytest.fixture
 def service():
     goals = FakeGoalRepository([make_goal()])
@@ -95,7 +100,7 @@ def service():
         replace(make_task("task-1"), target_units=10),
         make_task("task-2"),
     ])
-    return TaskService(goals, tasks)
+    return TaskService(goals, tasks, FixedClock())
 
 
 def test_add_goal_generates_id_and_lists_active_goals(service):
@@ -114,7 +119,7 @@ def test_add_task_uses_utc_creation_time(service):
         priority=Priority.P0,
     )
     assert task.title == "Review"
-    assert task.created_at.tzinfo == timezone.utc
+    assert task.created_at == datetime(2026, 9, 24, 12, tzinfo=timezone.utc)
     assert service.tasks.get(task.id) == task
 
 
@@ -201,7 +206,7 @@ def test_concurrent_unit_increments_do_not_lose_progress(tmp_path):
         def __getattr__(self, name):
             return getattr(self.repository, name)
 
-    service = TaskService(goals, SynchronizedTaskRepository(stored_tasks))
+    service = TaskService(goals, SynchronizedTaskRepository(stored_tasks), FixedClock())
     with ThreadPoolExecutor(max_workers=2) as workers:
         futures = [
             workers.submit(service.complete_units, task.id, 1)
