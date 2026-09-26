@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 
-LATEST_SCHEMA_VERSION = 2
+LATEST_SCHEMA_VERSION = 3
 
 CREATE_SCHEMA_MIGRATIONS_TABLE = (
     "CREATE TABLE IF NOT EXISTS schema_migrations ("
@@ -120,7 +120,46 @@ VERSION_TWO_STATEMENTS = (
     "CREATE INDEX idx_tasks_planned_start ON tasks(planned_start_at)",
     "CREATE INDEX idx_reminder_events_local_date ON reminder_events(local_date, occurred_at)",
 )
-MIGRATIONS = ((1, VERSION_ONE_STATEMENTS), (2, VERSION_TWO_STATEMENTS))
+VERSION_THREE_STATEMENTS = (
+    "CREATE TABLE academic_terms ("
+    "id TEXT PRIMARY KEY CHECK(length(trim(id)) > 0), "
+    "name TEXT NOT NULL CHECK(length(trim(name)) > 0), "
+    "start_date TEXT NOT NULL CHECK(date(start_date, '+0 days') IS NOT NULL AND date(start_date, '+0 days') = start_date), "
+    "end_date TEXT NOT NULL CHECK(date(end_date, '+0 days') IS NOT NULL AND date(end_date, '+0 days') = end_date), "
+    "week_one_start TEXT NOT NULL CHECK(date(week_one_start, '+0 days') IS NOT NULL AND date(week_one_start, '+0 days') = week_one_start), "
+    "CHECK(end_date >= start_date), "
+    "CHECK(week_one_start <= start_date), "
+    "CHECK(julianday(end_date) - julianday(week_one_start) < 371))",
+    "CREATE TABLE course_rules ("
+    "id TEXT PRIMARY KEY CHECK(length(trim(id)) > 0), "
+    "term_id TEXT NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE, "
+    "weekday INTEGER NOT NULL CHECK(typeof(weekday) = 'integer' AND weekday BETWEEN 0 AND 6), "
+    "start_week INTEGER NOT NULL CHECK(typeof(start_week) = 'integer' AND start_week BETWEEN 1 AND 53), "
+    "end_week INTEGER NOT NULL CHECK(typeof(end_week) = 'integer' AND end_week BETWEEN start_week AND 53), "
+    "week_parity TEXT NOT NULL CHECK(week_parity IN ('all', 'odd', 'even')), "
+    "start_time TEXT NOT NULL CHECK(time(start_time) IS NOT NULL AND time(start_time) = start_time "
+    "AND substr(start_time, 1, 2) BETWEEN '00' AND '23'), "
+    "end_time TEXT NOT NULL CHECK(time(end_time) IS NOT NULL AND time(end_time) = end_time "
+    "AND substr(end_time, 1, 2) BETWEEN '00' AND '23'), "
+    "course_name TEXT NOT NULL CHECK(length(trim(course_name)) > 0), "
+    "CHECK(end_time > start_time))",
+    "CREATE TABLE calendar_exceptions ("
+    "term_id TEXT NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE, "
+    "day TEXT NOT NULL CHECK(date(day, '+0 days') IS NOT NULL AND date(day, '+0 days') = day), "
+    "kind TEXT NOT NULL CHECK(kind IN ('holiday', 'rest', 'makeup')), "
+    "replacement_weekday INTEGER, note TEXT, "
+    "PRIMARY KEY(term_id, day), "
+    "CHECK((kind = 'makeup' AND typeof(replacement_weekday) = 'integer' "
+    "AND replacement_weekday BETWEEN 0 AND 6) OR "
+    "(kind IN ('holiday', 'rest') AND replacement_weekday IS NULL)))",
+    "CREATE INDEX idx_academic_terms_dates ON academic_terms(start_date, end_date, id)",
+    "CREATE INDEX idx_course_rules_schedule ON course_rules(term_id, weekday, start_week, week_parity, start_time, id)",
+)
+MIGRATIONS = (
+    (1, VERSION_ONE_STATEMENTS),
+    (2, VERSION_TWO_STATEMENTS),
+    (3, VERSION_THREE_STATEMENTS),
+)
 
 
 def read_schema_version(connection: sqlite3.Connection) -> int:

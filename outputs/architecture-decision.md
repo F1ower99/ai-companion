@@ -77,7 +77,7 @@ tests/
 | `memories` | `id`, `kind`, `content`, `source`, `importance`, `created_at`, `expires_at` | `profile`, `preference`, `behavioral`, `episodic`, `conversation` 五类记忆；检索摘要而非拼接全部历史 |
 | `conversations` / `messages` | 会话 id、角色、内容、时间、是否已摘要 | 对话上下文分段；保留与清除由用户控制 |
 | `reminders` | `id`, `reason`, `created_at`, `cooldown_until`, `extension_deadline`, `status` | 幂等提醒、短期延期和再次提醒 |
-| `academic_terms` | `id`, `start_date`, `week_one_start`, `total_weeks` | 从日期推导教学周 |
+| `academic_terms` | `id`, `name`, inclusive `start_date`/`end_date`, `week_one_start` | 教学周数由 week-one 锚点和学期结束日期推导，最多 53 周 |
 | `course_rules` | `term_id`, `weekday`, `start_week`, `end_week`, `week_parity`, `start_time`, `end_time`, `course_name` | 周次区间、单双周、星期与时间 |
 | `calendar_exceptions` | `date`, `kind`, `replacement_weekday`, `note` | 放假、调休、补课；按日期覆盖周期规则 |
 | `settings` | `key`, `value`, `updated_at` | 监测/麦克风开关、提醒阈值、人格档案、模型配置（不含 secret） |

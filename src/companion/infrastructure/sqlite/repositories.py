@@ -2,6 +2,7 @@ import sqlite3
 from dataclasses import replace
 from datetime import date, datetime, time, timedelta, timezone
 
+from companion.domain.calendar import AcademicTerm, CalendarException, CourseRule
 from companion.domain.errors import NotFoundError, StorageError, ValidationError
 from companion.domain.models import Goal, Memory, MemoryKind, MemoryQuery, Priority, Task, TaskStatus
 from companion.domain.reminders import (
@@ -12,6 +13,7 @@ from companion.domain.reminders import (
     TaskReminderState,
 )
 from companion.ports.reminders import ReminderPreferencesRepository, ReminderRepository
+from companion.ports.calendar import CalendarRepository
 from companion.infrastructure.sqlite.database import SQLiteDatabase
 
 
@@ -492,3 +494,175 @@ class SQLiteReminderPreferencesRepository(ReminderPreferencesRepository):
                     for key, value in values.items()
                 ],
             )
+
+
+class SQLiteCalendarRepository(CalendarRepository):
+    """Persist calendar definitions; schedule resolution remains in the domain layer."""
+
+    def __init__(self, database: SQLiteDatabase) -> None:
+        self.database = database
+
+    def add_term(self, term: AcademicTerm) -> None:
+        with self.database.connection() as connection:
+            try:
+                connection.execute(
+                    "INSERT INTO academic_terms(id, name, start_date, end_date, week_one_start) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        term.id, term.name, term.start_date.isoformat(),
+                        term.end_date.isoformat(), term.week_one_start.isoformat(),
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise ValidationError("The academic term could not be saved.") from error
+
+    def get_term(self, term_id: str) -> AcademicTerm | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM academic_terms WHERE id = ?", (term_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return AcademicTerm(
+            id=row["id"],
+            name=row["name"],
+            start_date=date.fromisoformat(row["start_date"]),
+            end_date=date.fromisoformat(row["end_date"]),
+            week_one_start=date.fromisoformat(row["week_one_start"]),
+        )
+
+    def list_terms(self) -> list[AcademicTerm]:
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM academic_terms ORDER BY start_date, id"
+            ).fetchall()
+        return [AcademicTerm(
+            id=row["id"],
+            name=row["name"],
+            start_date=date.fromisoformat(row["start_date"]),
+            end_date=date.fromisoformat(row["end_date"]),
+            week_one_start=date.fromisoformat(row["week_one_start"]),
+        ) for row in rows]
+
+    def delete_term(self, term_id: str) -> None:
+        with self.database.connection() as connection:
+            cursor = connection.execute("DELETE FROM academic_terms WHERE id = ?", (term_id,))
+            if cursor.rowcount == 0:
+                raise NotFoundError("Academic term not found.")
+
+    def add_rule(self, rule: CourseRule) -> None:
+        with self.database.connection() as connection:
+            try:
+                connection.execute(
+                    "INSERT INTO course_rules(id, term_id, weekday, start_week, end_week, "
+                    "week_parity, start_time, end_time, course_name) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        rule.id, rule.term_id, rule.weekday, rule.start_week, rule.end_week,
+                        rule.week_parity, rule.start_time.isoformat(timespec="seconds"),
+                        rule.end_time.isoformat(timespec="seconds"), rule.course_name,
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise ValidationError("The course rule could not be saved.") from error
+
+    def get_rule(self, rule_id: str) -> CourseRule | None:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM course_rules WHERE id = ?", (rule_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return CourseRule(
+            id=row["id"],
+            term_id=row["term_id"],
+            weekday=row["weekday"],
+            start_week=row["start_week"],
+            end_week=row["end_week"],
+            week_parity=row["week_parity"],
+            start_time=time.fromisoformat(row["start_time"]),
+            end_time=time.fromisoformat(row["end_time"]),
+            course_name=row["course_name"],
+        )
+
+    def list_rules(self, term_id: str) -> list[CourseRule]:
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM course_rules WHERE term_id = ? "
+                "ORDER BY weekday, start_time, end_time, course_name COLLATE NOCASE, id",
+                (term_id,),
+            ).fetchall()
+        return [CourseRule(
+            id=row["id"],
+            term_id=row["term_id"],
+            weekday=row["weekday"],
+            start_week=row["start_week"],
+            end_week=row["end_week"],
+            week_parity=row["week_parity"],
+            start_time=time.fromisoformat(row["start_time"]),
+            end_time=time.fromisoformat(row["end_time"]),
+            course_name=row["course_name"],
+        ) for row in rows]
+
+    def delete_rule(self, rule_id: str) -> None:
+        with self.database.connection() as connection:
+            cursor = connection.execute("DELETE FROM course_rules WHERE id = ?", (rule_id,))
+            if cursor.rowcount == 0:
+                raise NotFoundError("Course rule not found.")
+
+    def add_exception(self, exception: CalendarException) -> None:
+        with self.database.connection() as connection:
+            try:
+                connection.execute(
+                    "INSERT INTO calendar_exceptions(term_id, day, kind, replacement_weekday, note) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        exception.term_id, exception.day.isoformat(), exception.kind,
+                        exception.replacement_weekday, exception.note,
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise ValidationError("The calendar exception could not be saved.") from error
+
+    def get_exception(self, term_id: str, day: date) -> CalendarException | None:
+        if not isinstance(day, date) or isinstance(day, datetime):
+            raise ValidationError("Exception lookup requires a calendar date.")
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM calendar_exceptions WHERE term_id = ? AND day = ?",
+                (term_id, day.isoformat()),
+            ).fetchone()
+        if row is None:
+            return None
+        return CalendarException(
+            term_id=row["term_id"],
+            day=date.fromisoformat(row["day"]),
+            kind=row["kind"],
+            replacement_weekday=row["replacement_weekday"],
+            note=row["note"],
+        )
+
+    def list_exceptions(self, term_id: str) -> list[CalendarException]:
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM calendar_exceptions WHERE term_id = ? ORDER BY day",
+                (term_id,),
+            ).fetchall()
+        return [CalendarException(
+            term_id=row["term_id"],
+            day=date.fromisoformat(row["day"]),
+            kind=row["kind"],
+            replacement_weekday=row["replacement_weekday"],
+            note=row["note"],
+        ) for row in rows]
+
+    def delete_exception(self, term_id: str, day: date) -> None:
+        if not isinstance(day, date) or isinstance(day, datetime):
+            raise ValidationError("Exception deletion requires a calendar date.")
+        with self.database.connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM calendar_exceptions WHERE term_id = ? AND day = ?",
+                (term_id, day.isoformat()),
+            )
+            if cursor.rowcount == 0:
+                raise NotFoundError("Calendar exception not found.")

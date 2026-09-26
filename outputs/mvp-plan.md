@@ -110,7 +110,7 @@
 
 当前 `ActivitySource` 的正式默认实现返回 `unknown`。只有未来明确提供粗粒度、可暂停的状态来源后，普通 focused-task 提醒才会启用。此工作另立阶段，不读取窗口标题、键盘内容或屏幕画面。
 
-### 阶段 4：任务计划和学期日历
+### 阶段 4：任务计划和学期日历（已完成）
 
 **文件：**
 
@@ -125,10 +125,14 @@
 - `courses_for_day(day: date, term: AcademicTerm, rules: Sequence[CourseRule], exceptions: Sequence[CalendarException]) -> list[CourseOccurrence]`。
 - 日期 exception 优先于规则；`makeup` 根据 replacement weekday 选课；周次从 term.week_one_start 计算。
 
-- [ ] 写教学周第一天、学期起止边界、单双周、节假日覆盖、周末调休补课测试。
-- [ ] 实现纯函数和 repository query；输入日期不属于 term 时返回空列表。
-- [ ] Study Planner 提供当天剩余任务、计划分钟与硬截止摘要。
-- [ ] 运行 domain/repository 测试，检查 exception 优先级固定且无隐式本机日期依赖。
+- [x] 写教学周锚点、学期 inclusive 边界、单双周、节假日覆盖、周末调休补课和排序测试。
+- [x] 实现纯函数和 SQLite repository；输入日期不属于 term 时返回空列表。
+- [x] Study Planner 提供调用方选定的当天剩余任务、预计剩余分钟与硬截止摘要。
+- [x] 运行 domain/repository 测试；异常优先级固定，核心逻辑没有隐式本机日期依赖。
+- [x] schema v3 以追加迁移保存学期、周期课程和日期异常，并验证 v2 数据保留与失败回滚。
+- [x] 全量回归、compileall、pip check、差异与 secret 检查通过；Stage 4 独立提交。
+
+Stage 4 spec 和 implementation plan：[`Stage 4 design spec`](../docs/superpowers/specs/2026-09-26-stage-4-academic-calendar-design.md)、[`Stage 4 implementation plan`](../docs/superpowers/plans/2026-09-26-stage-4-academic-calendar.md)。课程时间保留为本地 wall time；当前没有日历 UI、导入/同步或自动调整任务。
 
 ### 阶段 5：LLM provider、人格和文字聊天
 
@@ -187,4 +191,4 @@
 
 ## 当前阶段边界
 
-阶段 1 桌面壳、阶段 2 本地数据基础和阶段 3 确定性主动决策/提醒闭环已交付。Stage 3 全量套件包含 200 项通过测试，compileall 和 pip check 通过；Windows 原生活动感知尚未接入，所以未知活动下普通提醒保持安静。下一阶段沿用原路线图中的阶段 4：任务计划和学期日历。LLM 对话、语音、打包、语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。
+阶段 1 桌面壳、阶段 2 本地数据基础、阶段 3 确定性主动决策/提醒闭环和阶段 4 任务计划/学期日历已交付。Stage 4 全量回归结果和提交记录见 `docs/overnight-report-2026-09-26.md`；Windows 原生活动感知尚未接入，所以未知活动下普通提醒保持安静。下一阶段沿用路线图阶段 5：LLM provider、人格和文字聊天。真实 provider 需要用户自行配置的凭据；没有凭据时应用必须保持离线且不发请求。语音、打包、语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。
