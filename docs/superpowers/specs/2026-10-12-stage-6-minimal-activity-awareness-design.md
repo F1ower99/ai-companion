@@ -1,8 +1,8 @@
 # Stage 6 Design: Minimal Local Activity Awareness
 
-Date: 2026-10-12  
-Status: Approved for autonomous implementation by the user's overnight development instruction.  
-Roadmap: `outputs/mvp-plan.md`  
+Date: 2026-10-12
+Status: Approved for autonomous implementation by the user's overnight development instruction.
+Roadmap: `outputs/mvp-plan.md`
 Prior contracts: Stage 3 `ActivitySource` / `ActivitySnapshot`; Stage 5 local-first privacy boundary.
 
 ## Problem and intent
@@ -39,7 +39,7 @@ The Windows adapter keeps only the last emitted state and its transition instant
 - `ActivityAwarenessPreferences(enabled: bool = False)` is a validated domain value.
 - `ActivityPreferencesRepository.get() -> ActivityAwarenessPreferences` and `.save(preferences) -> None` form a persistence port.
 - A version-5 SQLite migration creates one singleton preferences row with `enabled = 0`; no activity event or timestamp table is added.
-- `WindowsIdleActivitySource.snapshot(at: datetime) -> ActivitySnapshot` implements the existing port and provides `reset()`. A `ResettableActivitySource` port extends `ActivitySource` with that reset operation. A small injectable idle-duration reader isolates Win32 calls and supports deterministic tests.
+- `WindowsIdleActivitySource.snapshot(at: datetime) -> ActivitySnapshot` implements the existing port and provides `reset()`. A `ResettableActivitySource` port extends `ActivitySource` with `.reset() -> None` and an `.available: bool` property. A small injectable idle-duration reader isolates Win32 calls and supports deterministic tests.
 - The Win32 adapter uses `GetLastInputInfo` for the current interactive session and a tick counter only to compute elapsed time. Since `LASTINPUTINFO.dwTime` is a 32-bit tick value and Windows documents that it may not increase monotonically, invalid or implausible deltas produce `unknown` rather than a confident state. Windows documents that tick count includes sleep and hibernation time; on resume this source can report idle, never a long focused interval. [Microsoft: GetLastInputInfo](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getlastinputinfo), [Microsoft: Windows Time](https://learn.microsoft.com/en-us/windows/win32/sysinfo/windows-time).
 - `ActivityAwarenessService` is a Qt-free application boundary that owns the enabled preference, wraps the source, returns `unknown` when disabled, and resets the source's in-memory interval on enable/disable changes. `ProactiveReminderService` receives this object through its existing `ActivitySource` parameter.
 - The application composition root wires the SQLite preference repository and Windows source. Other platforms receive a source that returns `unknown` and cannot enable unsupported sensing.
