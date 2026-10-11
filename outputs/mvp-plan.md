@@ -134,25 +134,19 @@
 
 Stage 4 spec 和 implementation plan：[`Stage 4 design spec`](../docs/superpowers/specs/2026-09-26-stage-4-academic-calendar-design.md)、[`Stage 4 implementation plan`](../docs/superpowers/plans/2026-09-26-stage-4-academic-calendar.md)。课程时间保留为本地 wall time；当前没有日历 UI、导入/同步或自动调整任务。
 
-### 阶段 5：LLM provider、人格和文字聊天
+### 阶段 5：本地对话与可选文字 provider（实现完成；真实 provider 体验待人工验证）
 
-**文件：**
+Stage 5 已实现本地可测试的文字对话路径和可选的 OpenAI-compatible HTTPS adapter。调用真实 provider 尚未人工体验；在用户配置自己的密钥并选择要发送的内容前，本阶段只用 fake provider/mock transport 测试，没有外部请求。
 
-- 新建 `src/companion/ports/llm.py`、`providers/openai_compatible.py`、`application/chat_service.py`。
-- 新建 `src/companion/adapters/windows/secrets.py`、`settings_service.py`。
-- 修改聊天窗加入 provider 设置与发送状态；新增 `tests/application/test_chat_service.py`、`test_secret_store.py`。
+- [x] 使用 migration v4 保存 conversation、message delivery state 和非 secret provider settings；启动时恢复 pending 消息为状态不确定的 failed 消息。
+- [x] 增加 Qt-free ChatService、明确注入的 clock/repositories/provider、受限上下文构造、同一消息重试、取消和持久化恢复。
+- [x] 增加不跟随跨 host redirect、不自动重试、不 streaming、不启用 tools 的标准库 HTTPS provider adapter；测试只走 mock transport。
+- [x] 将 provider credential 存入 Windows Credential Manager；不支持的平台和凭据 API 错误不会回退到明文存储。
+- [x] 每次发送旁显示当前 host、已启用的近期对话/记忆/今日计划类别和会随请求发送的人格设置；未配置 secret 时保留草稿并且零网络请求。
+- [x] 覆盖 consent 失效、取消、provider 错误、重启恢复重试、多个失败消息依次重试和清空后新建活动对话。
+- [x] Stage 1–4 + Stage 5 全量测试 329 项通过；compileall、pip check、diff 检查及 secret pattern scan 通过；Stage 5 独立提交。
 
-**接口：**
-
-- `LLMProvider.complete(request: ChatRequest) -> ChatResponse`，取消与超时返回类型化错误。
-- `SecretStore.get(key: str) -> str | None`，`set(key: str, secret: str) -> None`，`delete(key: str) -> None`。
-- `ChatService.send(conversation_id: str, user_text: str) -> ChatResponse`：先保存用户消息，再按需检索最多 5 条记忆，调用 provider，保存回答和摘要事件。
-- `PersonalityProfile` 独立保存语气、原则、提醒偏好；prompt builder 只渲染 persona + 当天上下文，不拼全部历史。
-
-- [ ] 写 mock provider 测试：对话保存、记忆上限、timeout、401 和空响应。
-- [ ] 实现 provider Protocol 与一种 OpenAI-compatible HTTP provider；其他厂商和本地模型保持可替换接口。
-- [ ] 实现 Windows secret adapter；验证取回、覆盖、删除和日志无 secret。
-- [ ] 运行应用级测试；无 Key 时 UI 显示配置提示，不发网络请求。
+spec 和 plan：[`Stage 5 design spec`](../docs/superpowers/specs/2026-10-11-stage-5-conversation-and-provider-design.md)、[`Stage 5 implementation plan`](../docs/superpowers/plans/2026-10-11-stage-5-conversation-and-provider.md)。真实 provider UX 需要人工配置凭据、审核隐私摘要并发送用户主动选择的测试消息，仍待验证。
 
 ### 阶段 6：Agent 决策、提醒、延期协商（旧计划已由阶段 3 取代）
 
@@ -191,4 +185,4 @@ Stage 4 spec 和 implementation plan：[`Stage 4 design spec`](../docs/superpowe
 
 ## 当前阶段边界
 
-阶段 1 桌面壳、阶段 2 本地数据基础、阶段 3 确定性主动决策/提醒闭环和阶段 4 任务计划/学期日历已交付。Stage 4 全量回归结果和提交记录见 `docs/overnight-report-2026-09-26.md`；Windows 原生活动感知尚未接入，所以未知活动下普通提醒保持安静。下一阶段沿用路线图阶段 5：LLM provider、人格和文字聊天。真实 provider 需要用户自行配置的凭据；没有凭据时应用必须保持离线且不发请求。语音、打包、语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。
+阶段 1 桌面壳、阶段 2 本地数据基础、阶段 3 确定性主动决策/提醒闭环、阶段 4 任务计划/学期日历和阶段 5 本地对话/provider adapter 均已实现。阶段 5 的真实 provider 体验没有执行：要继续必须由用户提供并在本机保存自己的凭据，亲自选择消息和可分享类别后完成手动体验验证。下一阶段规划为最小、可暂停的 coarse Activity Awareness（idle/focused/unknown）规格与设计；不读取进程名、窗口标题、键盘或屏幕内容。语音、打包、自动语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。Stage 3/4 的历史记录将在 `docs/overnight-report-2026-09-26.md` 汇总，Stage 5 结果写入同一报告。

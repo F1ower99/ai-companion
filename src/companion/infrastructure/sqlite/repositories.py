@@ -236,11 +236,21 @@ class SQLiteMemoryRepository:
             except sqlite3.IntegrityError as error:
                 raise ValidationError("The memory could not be saved.") from error
 
-    def search(self, query: MemoryQuery, limit: int = 5) -> list[Memory]:
+    def search(
+        self,
+        query: MemoryQuery,
+        limit: int = 5,
+        *,
+        as_of_utc: datetime | None = None,
+    ) -> list[Memory]:
         if not isinstance(query, MemoryQuery):
             raise ValidationError("A memory query is required.")
         if type(limit) is not int or limit <= 0:
             raise ValidationError("Memory search limit must be a positive integer.")
+        if as_of_utc is not None:
+            if as_of_utc.tzinfo is None or as_of_utc.utcoffset() is None:
+                raise ValidationError("as_of_utc must include a timezone.")
+            as_of_utc = as_of_utc.astimezone(timezone.utc)
 
         clauses: list[str] = []
         parameters: list[object] = []
@@ -255,7 +265,9 @@ class SQLiteMemoryRepository:
             parameters.append(query.source)
         if not query.include_expired:
             clauses.append("(expires_at IS NULL OR expires_at > ?)")
-            parameters.append(datetime.now(timezone.utc).isoformat())
+            parameters.append(
+                (as_of_utc or datetime.now(timezone.utc)).isoformat()
+            )
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         parameters.append(limit)
         with self.database.connection() as connection:

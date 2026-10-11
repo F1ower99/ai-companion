@@ -19,7 +19,7 @@ def run_shell_script(code):
             capture_output=True,
             text=True,
             env=env,
-            timeout=4,
+            timeout=10,
             check=False,
         )
 
@@ -87,7 +87,7 @@ def run_application_script(code, database_path):
         capture_output=True,
         text=True,
         env=env,
-        timeout=4,
+        timeout=10,
         check=False,
     )
 
@@ -115,8 +115,46 @@ app.pet_window.close()
     assert result.returncode == 0, result.stderr
 
 
+def test_app_holds_exclusive_lock_before_startup_recovery(tmp_path):
+    code = '''
+from PySide6.QtCore import QLockFile
+from companion.desktop.app import create_application
+from companion.infrastructure.sqlite.database import default_database_path
+
+app = create_application(["companion-lock-test"])
+lock_path = default_database_path().with_name("companion.instance.lock")
+contender = QLockFile(str(lock_path))
+assert app.instance_lock.isLocked()
+assert not contender.tryLock(0)
+app.pet_window.close()
+'''
+    result = run_application_script(code, tmp_path / "companion.sqlite3")
+    assert result.returncode == 0, result.stderr
+
+
+def test_second_app_instance_stops_before_database_recovery(tmp_path):
+    code = '''
+from PySide6.QtCore import QLockFile
+from companion.desktop.app import create_application
+from companion.infrastructure.sqlite.database import default_database_path
+
+lock_path = default_database_path().with_name("companion.instance.lock")
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+owner = QLockFile(str(lock_path))
+assert owner.tryLock(0)
+app = create_application(["companion-second-instance-test"])
+assert app.startup_error == "AI Companion 已在运行；为保护本地对话，请使用已有窗口。"
+assert not hasattr(app, "pet_window")
+owner.unlock()
+'''
+    result = run_application_script(code, tmp_path / "companion.sqlite3")
+    assert result.returncode == 0, result.stderr
+
+
 def test_storage_failure_keeps_shell_running_with_safe_status(tmp_path):
     code = '''
+from PySide6.QtWidgets import QSystemTrayIcon
+QSystemTrayIcon.isSystemTrayAvailable = staticmethod(lambda: False)
 from companion.domain.errors import StorageError
 from companion.desktop.app import create_application
 

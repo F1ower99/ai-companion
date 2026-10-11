@@ -35,6 +35,11 @@ def test_snapshot_uses_one_local_time_value_and_resolves_day_and_quiet_bounds():
     assert snapshot.quiet_period_end_utc == datetime(2026, 9, 27, 0, tzinfo=timezone.utc)
 
 
+def test_local_date_comes_from_the_injected_local_time_resolver():
+    clock = SystemClock(FixedResolver(datetime(2026, 10, 11, 0, 5, tzinfo=LOCAL)))
+    assert clock.local_date() == date(2026, 10, 11)
+
+
 def test_snapshot_marks_overnight_quiet_hours_and_resolves_end_today():
     clock = SystemClock(FixedResolver(datetime(2026, 9, 27, 5, 0, tzinfo=LOCAL)))
     snapshot = clock.snapshot(ReminderPreferences())

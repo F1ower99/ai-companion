@@ -50,6 +50,12 @@ class SystemClock:
     def now_utc(self) -> datetime:
         return self.resolver.now_local().astimezone(timezone.utc)
 
+    def local_date(self) -> date:
+        local_now = self.resolver.now_local()
+        if local_now.tzinfo is None or local_now.utcoffset() is None:
+            raise ValidationError("The local-time resolver returned a naive current time.")
+        return local_now.date()
+
     def resolve_local(self, day: date, local_time: time) -> datetime:
         value = self.resolver.resolve_local(day, local_time)
         if value.tzinfo is None or value.utcoffset() is None:

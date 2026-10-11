@@ -266,6 +266,18 @@ def test_memory_search_can_include_expired_and_requires_positive_limit(repositor
         memories.search(MemoryQuery(), limit=0)
 
 
+def test_memory_search_uses_injected_expiry_instant_instead_of_wall_clock(repositories):
+    _, _, memories = repositories
+    memories.add(
+        make_memory(
+            "later-expiry", "future memory",
+            expires_at=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+    )
+    later_than_expiry = datetime(2040, 1, 1, tzinfo=timezone.utc)
+    assert memories.search(MemoryQuery(), as_of_utc=later_than_expiry) == []
+
+
 def test_memory_repository_converts_duplicate_id_to_validation_error(repositories):
     _, _, memories = repositories
     memories.add(make_memory("duplicate", "first"))

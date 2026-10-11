@@ -49,7 +49,7 @@ flowchart TD
   PORTS --> REMOTE[Selected cloud or local provider]
 ```
 
-`companion.domain` 不导入 PySide6、Windows API、数据库连接或厂商 SDK。`companion.application` 编排用例并通过 Protocol 接口访问存储、活动、语音和模型。Windows/Desktop adapters 只负责系统数据获取与呈现。LLM 的云端调用只发送用户输入和明确配置的上下文；活动记录默认留在 SQLite。
+`companion.domain` 不导入 PySide6、Windows API、数据库连接或厂商 SDK。`companion.application` 编排用例并通过 Protocol 接口访问存储、活动、语音和模型。Windows/Desktop adapters 只负责系统数据获取与呈现。LLM 的云端调用仅发送当前用户消息、本机回复语言/语气/原则设置和用户单独启用的上下文；每次发送前 UI 展示 provider host 与当前 payload 类别，首次或分享范围变化时要求明确确认。活动记录默认留在 SQLite。
 
 ```text
 src/companion/

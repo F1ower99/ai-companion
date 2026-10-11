@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 
-LATEST_SCHEMA_VERSION = 3
+LATEST_SCHEMA_VERSION = 4
 
 CREATE_SCHEMA_MIGRATIONS_TABLE = (
     "CREATE TABLE IF NOT EXISTS schema_migrations ("
@@ -155,10 +155,15 @@ VERSION_THREE_STATEMENTS = (
     "CREATE INDEX idx_academic_terms_dates ON academic_terms(start_date, end_date, id)",
     "CREATE INDEX idx_course_rules_schedule ON course_rules(term_id, weekday, start_week, week_parity, start_time, id)",
 )
+VERSION_FOUR_STATEMENTS = (
+    "ALTER TABLE messages ADD COLUMN delivery_state TEXT NOT NULL DEFAULT 'sent' "
+    "CHECK(delivery_state IN ('pending', 'sent', 'failed'))",
+)
 MIGRATIONS = (
     (1, VERSION_ONE_STATEMENTS),
     (2, VERSION_TWO_STATEMENTS),
     (3, VERSION_THREE_STATEMENTS),
+    (4, VERSION_FOUR_STATEMENTS),
 )
 
 
