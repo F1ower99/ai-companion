@@ -1,11 +1,11 @@
-# Stage 7A Design Spec: Local Voice Session Foundation and Windows Packaging
+# Stage 7A Design Spec: Provider-Neutral Local Voice Session Foundation
 
 Date: 2026-10-16
 Status: Approved for autonomous Stage 7A work under the user's overnight-development authorization
 
 ## Purpose
 
-Stage 7 starts the voice and Windows release work already listed in the roadmap. This first slice establishes a testable voice-session boundary and a repeatable Windows standalone build without choosing or enabling a speech-recognition engine. It preserves the user's local-first privacy rule: microphone access requires an explicit user action, raw audio stays in memory, recognized text is not sent automatically, and the app will not upload audio to a cloud service.
+Stage 7 starts the voice work already listed in the roadmap. This first slice establishes a testable voice-session boundary without choosing or enabling a speech-recognition engine. It preserves the user's local-first privacy rule: microphone access requires an explicit user action, raw audio stays in memory, recognized text is not sent automatically, and the app will not upload audio to a cloud service.
 
 The local STT engine is a product choice with meaningful effects on language support, bundle size, quality, and Windows requirements. It is recorded in `OPEN_QUESTIONS.md`; the independently useful voice lifecycle and packaging work can proceed without choosing it.
 
@@ -16,13 +16,13 @@ The local STT engine is a product choice with meaningful effects on language sup
 - Require voice providers to declare local execution. The service rejects network-backed providers in this stage.
 - Request microphone permission only after the user invokes push-to-talk. Denied permission, unavailable hardware, and provider errors return a safe visible state without crashing chat or reminders.
 - Add a compact voice affordance to the existing companion chat, disabled with a clear explanation until a local STT provider is selected and composed.
-- Add a reproducible Windows standalone deployment configuration and build guide using Qt for Python's deployment tool.
-- Keep build and automated tests isolated from the user's real SQLite profile, credentials, and Windows startup settings.
+- Keep automated tests isolated from the user's real SQLite profile, credentials, microphone, and Windows startup settings.
 
 ## Non-goals
 
 - No cloud STT/TTS, streaming audio, network speech provider, credential entry for voice, or audio upload.
 - No STT/TTS engine implementation until the local engine question is resolved. The Stage 7A runtime must clearly report voice unavailable rather than pretend to transcribe.
+- No Windows packaging or installer work in Stage 7A; it has its own design and implementation plan.
 - No automatic speech playback. The user must explicitly request playback for an assistant reply; pressing push-to-talk interrupts current playback.
 - No audio files, voice transcripts, microphone identifiers, or voice activity history are persisted.
 - No global hotkey, background microphone access, always-on listening, wake word, speech analytics, or automatic memory extraction.
@@ -34,14 +34,13 @@ The local STT engine is a product choice with meaningful effects on language sup
 - Stage 5's `ChatService` is synchronous, Qt-free, and runs through a `QThreadPool` worker. The chat composer sends only after the user presses Send.
 - Stage 6's activity source is opt-in, disabled by default, and exposes no detailed application or input data.
 - The app uses Python 3.10+, PySide6 Essentials 6.11.2, and SQLite migrations v1–v5. PySide6 Addons 6.11.2 is already an optional `voice` extra, intended for Qt Multimedia.
-- Existing repository guidance and roadmap select `pyside6-deploy`/Nuitka for deployment and require a license inventory.
 - Stage 7A must not change reminder decision rules, chat consent semantics, or the Stage 2/3/4/5/6 migration history.
 
 ## Approaches considered
 
 1. **Cloud speech provider:** would produce an end-to-end voice demo quickly, but sends personal audio to a remote service and requires a provider choice and credential. It conflicts with the user's instruction not to upload private data, so it is excluded.
 2. **Bundle a local speech model now:** preserves privacy but commits to a model/runtime, language profile, distribution size, and model licensing before the user has selected one. Defer until the local speech-engine question is answered.
-3. **Provider-neutral local session plus Windows packaging:** creates the stable lifecycle and release baseline, exercises all session behavior with fakes, and leaves real microphone capture/transcription disabled until a local provider exists. This is the selected Stage 7A scope.
+3. **Provider-neutral local session:** creates the stable lifecycle, exercises behavior with fakes, and leaves real microphone capture/transcription disabled until a local provider exists. This is the selected Stage 7A scope.
 
 ## Domain and application model
 
@@ -80,16 +79,7 @@ The local STT engine is a product choice with meaningful effects on language sup
 - `local_only` is required by the voice application service. A future network provider requires a separate spec, explicit disclosure/consent, and a user-approved change to the no-cloud-audio boundary.
 - Automated tests inject fake ports and never touch a real microphone or speaker.
 
-## Windows packaging
-
-- Use the existing Qt for Python deployment tool with an explicit standalone mode and `src/companion/desktop/app.py` as entry point; the output is a folder containing the executable and runtime dependencies.
-- Keep release output under ignored `dist/`; keep Nuitka/build work in ignored build directories. Build scripts must not delete directories or touch `%LOCALAPPDATA%`, Credential Manager, or registry values.
-- Add a PowerShell preflight that checks Windows, the project virtual environment, deployment tool, and Microsoft `dumpbin` availability before starting a build.
-- Add a third-party license inventory with package name, version, declared license metadata, and license-file path when available. Missing metadata is called out for review; the inventory is not legal advice or a substitute for release review.
-- Document launch from a clean temporary `LOCALAPPDATA` profile, database placement, credential behavior, and the requirement to test the extracted standalone directory before publishing an installer.
-- The manual acceptance run must verify a clean-profile launch and basic desktop/chat/reminder behavior. It must not create a user's login-start entry.
-
-The selected deploy tool wraps Nuitka and its default mode varies by Qt for Python version, so the project configuration explicitly pins `standalone`. The official documentation describes the deployment tool and its Windows `dumpbin` prerequisite: [Qt for Python: pyside6-deploy](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-deploy.html). Qt Multimedia exposes the audio device/source/sink APIs, and microphone access uses Qt's permission API: [Qt for Python: Qt Multimedia](https://doc.qt.io/qtforpython-6.11/PySide6/QtMultimedia/index.html), [Qt for Python: QMicrophonePermission](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QMicrophonePermission.html).
+Qt Multimedia exposes the audio device/source/sink APIs, and microphone access uses Qt's permission API: [Qt for Python: Qt Multimedia](https://doc.qt.io/qtforpython-6.11/PySide6/QtMultimedia/index.html), [Qt for Python: QMicrophonePermission](https://doc.qt.io/qtforpython-6/PySide6/QtCore/QMicrophonePermission.html).
 
 ## Failure handling
 
@@ -104,8 +94,7 @@ The selected deploy tool wraps Nuitka and its default mode varies by Qt for Pyth
 
 - Domain/application tests with fake capture, local STT, TTS, and cancellation: permission denial path, start/stop, transcript not auto-sent, cancel discards audio, TTS stop on PTT, failed provider cleanup, bounded capture, and stale worker result rejection.
 - Qt tests inject a fake `VoiceSession`; assert disabled controls request no permission, recording state is visible, transcript only fills the composer, and Send stays an explicit action.
-- Packaging checks validate `pysidedeploy.spec`, preflight diagnostics, output ignore rules, and license inventory parser without running a destructive build in automated tests.
-- Run the complete existing suite with `QT_QPA_PLATFORM=offscreen`, `compileall`, `pip check`, staged diff/secret checks, and a `pyside6-deploy --dry-run` when the build tool is available.
+- Run the complete existing suite with `QT_QPA_PLATFORM=offscreen`, `compileall`, `pip check`, and staged diff/secret checks.
 - A human Windows acceptance run is still required for microphone permission, a real local speech engine, packaged startup in a clean profile, and device interruption behavior. Stage 7A will not claim those manual tests passed.
 
 ## Acceptance criteria
@@ -114,10 +103,9 @@ The selected deploy tool wraps Nuitka and its default mode varies by Qt for Pyth
 - A completed fake transcription reaches the composer but makes no provider request or conversation write until Send is pressed.
 - Pressing push-to-talk stops active speech; cancel discards data; all error paths release capture and leave chat/reminders usable.
 - No local speech engine means the voice controls are disabled without microphone enumeration or permission prompts.
-- The Windows build configuration selects the existing app entry point and standalone output; preflight is safe and docs explain clean-profile testing.
-- Third-party package/license inventory and unresolved local STT engine choice are recorded.
+- The unresolved local speech-stack choice is recorded in `OPEN_QUESTIONS.md`.
 - Existing Stage 1–6 tests remain green. Feature and documentation receive separate commits; no push, merge, or installer publication is part of Stage 7A.
 
 ## Deferred work
 
-Selecting and implementing a local STT/TTS engine, real QAudioSource/QAudioSink wiring, user-led microphone testing, the Windows standalone build on the target toolchain, installer creation/signing, start-on-login setting, automatic memory, semantic search, cloud voice, and release publication are deferred beyond the autonomous Stage 7A implementation. The speech-engine choice remains in `OPEN_QUESTIONS.md`.
+Selecting and implementing a local STT/TTS engine, real QAudioSource/QAudioSink wiring, user-led microphone testing, Windows packaging, installer creation/signing, start-on-login setting, automatic memory, semantic search, cloud voice, and release publication are deferred beyond the autonomous Stage 7A implementation. The speech-engine choice remains in `OPEN_QUESTIONS.md`.
