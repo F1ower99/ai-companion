@@ -109,5 +109,5 @@
 - [x] **Step 1: Review the full diff** for policy scope, state-duration correctness, SQLite migration immutability, UI failure behavior, and accidental collection/persistence/network paths; fix findings.
 - [x] **Step 2: Run full verification:** `QT_QPA_PLATFORM=offscreen python -m pytest -q -p no:cacheprovider` (370 passed), `compileall` with bytecode redirected to the temp directory, `pip check`, `git diff --check`, and focused secret/debug/activity-data scans.
 - [x] **Step 3: Re-review the staged diff and Git status.** Confirm no real OS polling occurred during tests, no temporary artifacts are staged, and the only durable activity setting is the opt-in boolean.
-- [ ] **Step 4: Commit** with `feat: add opt-in local activity awareness`.
-- [ ] **Step 5: Record** the actual commit hash and verification in the completion record and overnight report. Stop before manual Windows experience testing; the user should first review the new opt-in control and verify expected idle behavior on their own machine.
+- [x] **Step 4: Commit** with `feat: add opt-in local activity awareness` (`afa34dd7fc64f5b4e3320fb710d4b88c1480cb04`).
+- [x] **Step 5: Record** the actual commit hash and verification in the completion record and overnight report. Stop before manual Windows experience testing; the user should first review the new opt-in control and verify expected idle behavior on their own machine.

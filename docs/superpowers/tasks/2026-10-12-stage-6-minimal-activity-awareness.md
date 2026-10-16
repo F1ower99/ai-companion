@@ -22,10 +22,11 @@ Plan: [`Stage 6 implementation plan`](../plans/2026-10-12-stage-6-minimal-activi
 
 - Focused Stage 6 layer/UI/lifecycle tests: 85 passed before final full regression.
 - App startup subprocess tests now set `LOCALAPPDATA` to a per-test temporary directory; this prevents an already-running user's instance lock from making tests fail or touching the real profile. The new isolation regression test was observed failing before the helper fix.
-- Final full suite: `QT_QPA_PLATFORM=offscreen python -m pytest -q -p no:cacheprovider` — 370 passed (latest fresh run recorded at commit time).
+- Final full suite: `QT_QPA_PLATFORM=offscreen python -m pytest -q -p no:cacheprovider` — 370 passed in 4.96s after the Stage 6 feature commit; no source changes followed.
 - `compileall` passed with bytecode redirected to a temp cache; `pip check` reported no broken requirements; `git diff --check` passed; token-shaped secret, debug hook, and prohibited activity API scans were clean.
 - The non-monotonic, full-counter-cycle, and greater-than-half-cycle new-input regression tests were observed failing before their fixes and pass afterward; all 17 Windows activity adapter tests pass. The adapter uses `GetTickCount64` to maintain an in-memory input timestamp epoch and returns `unknown` when a full-cycle epoch cannot be resolved.
 - Whole-diff independent review found and the implementation fixed the long-uptime 32-bit tick ambiguity. Follow-up review confirmed no remaining behavioral finding; re-review included the staged fix and regression test.
+- Stage 6 implementation commit: `afa34dd7fc64f5b4e3320fb710d4b88c1480cb04` (`feat: add opt-in local activity awareness`).
 
 An auto-review rejected a temporary test-only edit that would have removed the SQLite singleton constraint. The schema invariant was kept; the direct insertion test and full test suite verify the constraint without weakening implementation.
 
