@@ -2,7 +2,7 @@
 
 > **For agentic workers:** 本计划按小阶段逐项执行。每个阶段完成后运行该阶段的测试与构建，再进入下一阶段。
 
-**目标：** 在 Windows 上交付一个本地优先的 Companion MVP，能理解当天任务和应用使用情况，在合适时机提醒、协商一次延期，并通过文本和基础语音交流。
+**目标：** 在 Windows 上交付一个本地优先的 Companion MVP，能理解当天任务和粗粒度的 idle/recently-active 状态，在合适时机提醒、协商一次延期，并通过文本和基础语音交流。
 
 **架构：** 使用 PySide6 做桌面外壳；Agent、计划、记忆、日历和策略放在无 UI 依赖的 Python 包；Windows、SQLite、LLM、STT 和 TTS 都由适配器实现。首版的打断策略为确定性本地逻辑，LLM 只负责语言交互。
 
@@ -13,8 +13,8 @@
 ## 全局约束
 
 - 目标平台：Windows 10/11 x64。
-- 个人计划、活动、记忆与对话默认保存在本地 SQLite。
-- 活动数据只含 App Name、Start Time、End Time、Duration、Category；不采集按键、窗口标题、屏幕截图或聊天内容作为活动遥测。
+- 个人计划、记忆、对话和活动感知开关保存在本地 SQLite；当前不持久化活动状态或活动历史。
+- 活动感知仅可选读取当前 Windows 会话最近输入的时间差，不读取应用名称、窗口标题、输入内容、屏幕截图或聊天内容。
 - 活动监测、麦克风、主动提醒均可独立暂停；麦克风默认 push-to-talk。
 - API Key 只能存 Windows Credential Manager，不能写配置文件、SQLite、日志或源代码。
 - `domain` 不依赖 Qt、Windows API、数据库驱动实现或厂商 SDK。
@@ -106,9 +106,9 @@
 - [x] 验收 19:30 计划不会机械弹出；20:10 连续专注 130 分钟后重评晚间任务；延期后重新加载进度/活动。
 - [x] 全量测试、compileall、pip check 和 Stage 独立提交通过；Windows 原生活动监测仍按隐私边界延期。
 
-### 阶段 3 之后延期：Windows 活动感知
+### 阶段 3 之后延期：细粒度 Windows 活动感知
 
-当前 `ActivitySource` 的正式默认实现返回 `unknown`。只有未来明确提供粗粒度、可暂停的状态来源后，普通 focused-task 提醒才会启用。此工作另立阶段，不读取窗口标题、键盘内容或屏幕画面。
+阶段 6 已提供最小的可选 idle/recently-active 来源；按应用类别统计、活动历史和任务推断仍延期，不读取窗口标题、键盘内容或屏幕画面。
 
 ### 阶段 4：任务计划和学期日历（已完成）
 
@@ -148,9 +148,11 @@ Stage 5 已实现本地可测试的文字对话路径和可选的 OpenAI-compati
 
 spec 和 plan：[`Stage 5 design spec`](../docs/superpowers/specs/2026-10-11-stage-5-conversation-and-provider-design.md)、[`Stage 5 implementation plan`](../docs/superpowers/plans/2026-10-11-stage-5-conversation-and-provider.md)。真实 provider UX 需要人工配置凭据、审核隐私摘要并发送用户主动选择的测试消息，仍待验证。
 
-### 阶段 6：Agent 决策、提醒、延期协商（旧计划已由阶段 3 取代）
+### 阶段 6：最小本地活动感知（实现完成；等待 Windows 手动体验）
 
-原计划中的 `InterventionContext`、基础阈值和 `NegotiationService` 已被阶段 3 的更完整确定性决策模型、提醒生命周期、持久化和 UI 取代，不再重复实现。进入本阶段编号前需根据阶段 4/5 的实际交付重新规划剩余 Companion/Agent 集成；LLM 仍不得决定基础调度、deadline、cooldown、snooze 或 extension。
+Stage 3 已完成旧阶段号里的决策与延期模型；Stage 6 实现仅凭当前 Windows 会话最近输入时间产生 `idle / focused / unknown`。功能默认关闭，五分钟无输入归为 idle；持久化只有一个开关，状态和时间不保存。提醒设置可单独启停，未启用、API 失败或不支持平台都退化为 `unknown`。不记录进程/应用名称、窗口标题、输入或屏幕内容。
+
+规格与计划：[`Stage 6 design`](../docs/superpowers/specs/2026-10-12-stage-6-minimal-activity-awareness-design.md)、[`Stage 6 implementation plan`](../docs/superpowers/plans/2026-10-12-stage-6-minimal-activity-awareness.md)。真实 Windows 空闲行为仍待用户在设置中主动启用并手动体验；没有测试通过读取真实输入状态完成。
 
 ### 阶段 7：基础语音、打包和首版验收
 
@@ -177,12 +179,12 @@ spec 和 plan：[`Stage 5 design spec`](../docs/superpowers/specs/2026-10-11-sta
 
 1. 创建三个通用任务：短时记忆练习、优先课程学习和个人项目。
 2. 启动应用后，桌宠出现在主屏右下角；可拖动；点击打开聊天窗；托盘可退出。
-3. 选择开始监测并打开专注应用。前 30 分钟没有提醒，活动记录只有 app name、时间、时长和分类。
-4. 模拟/等待个人项目连续活动到 120 分钟且高优先级任务未完成；Agent 给出原因明确的提醒。
+3. 在提醒设置中主动启用活动感知。最近有输入时为 `focused`，五分钟无输入后为 `idle`；暂停后下一次评估为 `unknown`。数据中没有应用名称或活动历史。
+4. recent activity 连续维持 120 分钟且高优先级任务未完成时，检查 Agent 是否按已有原因码决定提醒。
 5. 回复“再给我 20 分钟”；系统根据剩余计划决定是否接受。若接受，保存 one-time deadline，不改项目 hard deadline。
-6. deadline 到达后提醒一次。完成高优先级任务后继续使用专注应用，不再重复打扰。
+6. deadline 到达后重新评估一次。完成高优先级任务后持续与桌宠交互，确认不会重复打扰。
 7. 暂停监测、暂停麦克风、删除记忆、清除对话和关闭提醒都能立即生效；日志里不出现 API Key。
 
 ## 当前阶段边界
 
-阶段 1 桌面壳、阶段 2 本地数据基础、阶段 3 确定性主动决策/提醒闭环、阶段 4 任务计划/学期日历和阶段 5 本地对话/provider adapter 均已实现。阶段 5 的真实 provider 体验没有执行：要继续必须由用户提供并在本机保存自己的凭据，亲自选择消息和可分享类别后完成手动体验验证。下一阶段规划为最小、可暂停的 coarse Activity Awareness（idle/focused/unknown）规格与设计；不读取进程名、窗口标题、键盘或屏幕内容。语音、打包、自动语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。Stage 3/4 的历史记录将在 `docs/overnight-report-2026-09-26.md` 汇总，Stage 5 结果写入同一报告。
+阶段 1 桌面壳、阶段 2 本地数据基础、阶段 3 确定性主动决策/提醒闭环、阶段 4 任务计划/学期日历、阶段 5 本地对话/provider adapter 和阶段 6 可选 idle/recently-active 感知均已实现。Stage 5 真实 provider 与 Stage 6 Windows 空闲行为尚未人工体验；前者需用户自己的凭据和主动选择的测试内容，后者需用户在 UI 里主动启用。阶段 7 语音、打包和 MVP 验收将依赖用户体验测试，其中任何云端语音 provider 都需单独明示。自动语义记忆和跨设备同步仍未实现，整体 MVP 尚未完成。Stage 3/4/5/6 的阶段记录写入 `docs/overnight-report-2026-09-26.md`。

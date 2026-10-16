@@ -38,6 +38,7 @@ class ChatWindow(QDialog):
         *,
         clock=None,
         reminder_service=None,
+        activity_awareness_service=None,
         chat_service=None,
         settings_repository=None,
         secret_store=None,
@@ -48,6 +49,7 @@ class ChatWindow(QDialog):
         self.task_service = task_service
         self.clock = clock or getattr(task_service, "clock", None)
         self.reminder_service = reminder_service
+        self.activity_awareness_service = activity_awareness_service
         self.chat_service = chat_service
         self.settings_repository = settings_repository or getattr(chat_service, "settings", None)
         self.secret_store = secret_store or getattr(chat_service, "secrets", None)
@@ -180,9 +182,16 @@ class ChatWindow(QDialog):
         if self.reminder_service is None:
             return
         if self.reminder_settings_dialog is None:
-            self.reminder_settings_dialog = ReminderSettingsDialog(self.reminder_service, self)
+            self.reminder_settings_dialog = ReminderSettingsDialog(
+                self.reminder_service,
+                self,
+                activity_awareness_service=self.activity_awareness_service,
+            )
             self.reminder_settings_dialog.preferencesSaved.connect(
                 lambda _preferences: self.reminderEvaluationRequested.emit()
+            )
+            self.reminder_settings_dialog.activityAwarenessChanged.connect(
+                lambda _enabled: self.reminderEvaluationRequested.emit()
             )
         self.reminder_settings_dialog.show()
         self.reminder_settings_dialog.raise_()

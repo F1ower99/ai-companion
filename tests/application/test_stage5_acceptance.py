@@ -10,6 +10,7 @@ def _run_app_script(tmp_path: Path, code: str) -> subprocess.CompletedProcess[st
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["AI_COMPANION_TEST_DB"] = str(tmp_path / "stage5.sqlite3")
+    env["LOCALAPPDATA"] = str(tmp_path / "local-app-data")
     source_root = str(Path(__file__).resolve().parents[2] / "src")
     env["PYTHONPATH"] = source_root + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(

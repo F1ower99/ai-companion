@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 
-LATEST_SCHEMA_VERSION = 4
+LATEST_SCHEMA_VERSION = 5
 
 CREATE_SCHEMA_MIGRATIONS_TABLE = (
     "CREATE TABLE IF NOT EXISTS schema_migrations ("
@@ -159,11 +159,18 @@ VERSION_FOUR_STATEMENTS = (
     "ALTER TABLE messages ADD COLUMN delivery_state TEXT NOT NULL DEFAULT 'sent' "
     "CHECK(delivery_state IN ('pending', 'sent', 'failed'))",
 )
+VERSION_FIVE_STATEMENTS = (
+    "CREATE TABLE activity_preferences ("
+    "id INTEGER PRIMARY KEY CHECK(id = 1), "
+    "enabled INTEGER NOT NULL CHECK(typeof(enabled) = 'integer' AND enabled IN (0, 1)))",
+    "INSERT INTO activity_preferences(id, enabled) VALUES (1, 0)",
+)
 MIGRATIONS = (
     (1, VERSION_ONE_STATEMENTS),
     (2, VERSION_TWO_STATEMENTS),
     (3, VERSION_THREE_STATEMENTS),
     (4, VERSION_FOUR_STATEMENTS),
+    (5, VERSION_FIVE_STATEMENTS),
 )
 
 

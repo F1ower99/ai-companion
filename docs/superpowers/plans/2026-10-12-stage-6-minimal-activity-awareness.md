@@ -24,7 +24,7 @@
 - New profiles must remain disabled after database creation, migration, and restart.
 - Enabling or pausing must only take effect after the preference write succeeds; failed writes preserve the prior effective state.
 - Pause/resume and a scheduler gap longer than five minutes must not accumulate focused time.
-- Win32 false returns, non-monotonic/future tick values, unsupported OS, and malformed reader values must return `unknown` without escaping into the UI.
+- Win32 false returns, non-monotonic/future tick values, ambiguous 32-bit input-tick epochs after a full counter cycle, unsupported OS, and malformed reader values must return `unknown` without escaping into the UI.
 - The decision layer must receive identical snapshots and preserve Stage 3 results; no activity value may be persisted or added to provider payloads.
 
 ---
@@ -33,7 +33,7 @@
 
 **Files:**
 - Create: `src/companion/domain/activity.py`
-- Modify: `src/companion/ports/activity.py`, `src/companion/ports/repositories.py`
+- Modify: `src/companion/ports/activity.py`
 - Modify: `src/companion/infrastructure/sqlite/migrations.py`
 - Create: `src/companion/infrastructure/sqlite/activity_preferences.py`
 - Test: `tests/domain/test_activity.py`, `tests/infrastructure/test_sqlite_activity_preferences.py`, `tests/infrastructure/test_sqlite_migrations.py`
@@ -44,10 +44,10 @@
 - `ResettableActivitySource` extends `ActivitySource` with `.reset() -> None` and a read-only `.available: bool` property.
 - SQLite schema v5 creates a singleton preference row with `enabled = 0`.
 
-- [ ] **Step 1: Write failing tests** for the disabled default, invalid preference type, v4-to-v5 upgrade preservation, singleton constraints, and preference read/write across database reopen.
-- [ ] **Step 2: Run the domain, repository, and migration tests** and confirm they fail for missing v5 APIs/schema.
-- [ ] **Step 3: Implement the preference value, repository port/adapter, and append-only v5 migration.** Store only `enabled`; do not add activity event/timestamp columns or tables.
-- [ ] **Step 4: Run the focused tests** and confirm the new schema defaults off and existing v4 records remain intact.
+- [x] **Step 1: Write failing tests** for the disabled default, invalid preference type, v4-to-v5 upgrade preservation, singleton constraints, and preference read/write across database reopen.
+- [x] **Step 2: Run the domain, repository, and migration tests** and confirm they fail for missing v5 APIs/schema.
+- [x] **Step 3: Implement the preference value, repository port/adapter, and append-only v5 migration.** Store only `enabled`; do not add activity event/timestamp columns or tables.
+- [x] **Step 4: Run the focused tests** and confirm the new schema defaults off and existing v4 records remain intact.
 
 ### Task 2: Windows Idle Activity Adapter
 
@@ -57,13 +57,13 @@
 
 **Interfaces:**
 - `IdleDurationReader.idle_seconds() -> float` isolates operating-system access.
-- `WindowsIdleDurationReader.idle_seconds() -> float` reads only `GetLastInputInfo` plus the tick counter and raises on unsupported or failed APIs.
+- `WindowsIdleDurationReader.idle_seconds() -> float` reads only `GetLastInputInfo` plus `GetTickCount64`, extends the 32-bit input timestamp only when its epoch is known, and raises on ambiguous timing, unsupported or failed APIs.
 - `WindowsIdleActivitySource.snapshot(at: datetime) -> ActivitySnapshot`, `.reset() -> None`, and `.available: bool` implement the resettable activity port. It uses a 300-second threshold and a 300-second maximum sample gap.
 
-- [ ] **Step 1: Write fake-reader tests** for 299/300-second boundary, state transitions, first-sample timing, five-minute sample gaps, reset, unsupported platform, failed API, malformed values, and tick wrap/impossible deltas.
-- [ ] **Step 2: Run the adapter tests** and verify they fail before implementation.
-- [ ] **Step 3: Implement the lazy `ctypes` Win32 reader and in-memory state mapper.** No Win32 imports or calls occur until enabled sampling reaches the adapter.
-- [ ] **Step 4: Run the adapter tests**; all OS interactions use fakes and no real user-input state is queried.
+- [x] **Step 1: Write fake-reader tests** for 299/300-second boundary, state transitions, first-sample timing, five-minute sample gaps, reset, unsupported platform, failed API, malformed values, short tick wrap, ambiguous startup after a full tick cycle, stale input across a full cycle, and a new input after a greater-than-half-cycle idle.
+- [x] **Step 2: Run the adapter tests** and verify they fail before implementation.
+- [x] **Step 3: Implement the lazy `ctypes` Win32 reader and in-memory state mapper.** No Win32 imports or calls occur until enabled sampling reaches the adapter.
+- [x] **Step 4: Run the adapter tests**; all OS interactions use fakes and no real user-input state is queried.
 
 ### Task 3: Application Awareness Service and Pause Semantics
 
@@ -77,16 +77,16 @@
 - `.set_enabled(enabled: bool) -> ActivityAwarenessPreferences` persists first, then updates effective state and resets the source.
 - `.snapshot(at: datetime) -> ActivitySnapshot` returns `unknown` when disabled, unsupported, unavailable, or on source failure.
 
-- [ ] **Step 1: Write failing fake-based tests** for disabled zero-query behavior, enabled forwarding, pause/resume reset, no state change after persistence failure, unsupported enable rejection, and source failure to `unknown`.
-- [ ] **Step 2: Run the service tests** and verify the assertions fail before implementation.
-- [ ] **Step 3: Implement the Qt-free wrapper** with fail-closed startup behavior and no database calls from the decision engine.
-- [ ] **Step 4: Run application tests** and confirm Stage 3 reminder tests remain unchanged for the same snapshots.
+- [x] **Step 1: Write failing fake-based tests** for disabled zero-query behavior, enabled forwarding, pause/resume reset, no state change after persistence failure, unsupported enable rejection, and source failure to `unknown`.
+- [x] **Step 2: Run the service tests** and verify the assertions fail before implementation.
+- [x] **Step 3: Implement the Qt-free wrapper** with fail-closed startup behavior and no database calls from the decision engine.
+- [x] **Step 4: Run application tests** and confirm Stage 3 reminder tests remain unchanged for the same snapshots.
 
 ### Task 4: Opt-In Settings and Application Composition
 
 **Files:**
 - Modify: `src/companion/desktop/app.py`, `src/companion/desktop/chat_window.py`, `src/companion/desktop/reminder_settings_dialog.py`
-- Test: `tests/desktop/test_reminder_settings_dialog.py`, `tests/desktop/test_app_lifecycle.py`, `tests/application/test_stage6_acceptance.py`
+- Test: `tests/desktop/test_reminder_settings_dialog.py`, `tests/desktop/test_app_lifecycle.py`, `tests/application/test_stage5_acceptance.py`, `tests/application/test_stage6_acceptance.py`
 - Modify: `README.md`, `outputs/mvp-plan.md`, `outputs/architecture-decision.md`
 - Create: `docs/superpowers/tasks/2026-10-12-stage-6-minimal-activity-awareness.md`
 
@@ -94,10 +94,11 @@
 - The application composes `SQLiteActivityPreferencesRepository`, `WindowsIdleActivitySource`, and `ActivityAwarenessService`, then passes the service to `ProactiveReminderService` and the reminder settings dialog.
 - `ReminderSettingsDialog` exposes an unchecked `activityAwarenessEnabled` control with concise privacy text. It saves this toggle immediately and emits `activityAwarenessChanged(bool)` only after a successful save.
 
-- [ ] **Step 1: Write failing Qt/composition tests** for unchecked default, privacy copy, immediate toggle persistence and reevaluation, rollback on storage error, disabled control on unsupported platforms, and disabled startup making no OS calls.
-- [ ] **Step 2: Run the focused UI and composition tests** and confirm they fail before wiring.
-- [ ] **Step 3: Wire the service and settings control.** A failed save restores the persisted checkbox; a successful toggle requests exactly one reminder evaluation. Update README/roadmap/architecture decision with the opt-in boundary and completion record.
-- [ ] **Step 4: Run focused UI/application tests** and verify task, chat, reminder, and provider controls remain usable.
+- [x] **Step 1: Write failing Qt/composition tests** for unchecked default, privacy copy, immediate toggle persistence and reevaluation, rollback on storage error, disabled control on unsupported platforms, and disabled startup making no OS calls.
+- [x] **Step 2: Run the focused UI and composition tests** and confirm they fail before wiring.
+- [x] **Step 3: Wire the service and settings control.** A failed save restores the persisted checkbox; a successful toggle requests exactly one reminder evaluation. Update README/roadmap/architecture decision with the opt-in boundary and completion record.
+- [x] **Step 4: Run focused UI/application tests** and verify task, chat, reminder, and provider controls remain usable.
+- [x] **Step 5: Isolate application subprocess tests from the user's `LOCALAPPDATA`.** Use each test's temporary directory for the database lock and credential-store paths so live user processes cannot make startup tests flaky or be touched by the suite.
 
 ### Task 5: Whole-Stage Review and Commit
 
@@ -105,8 +106,8 @@
 - Review: all Stage 6 source, tests, migrations, and docs.
 - Modify: `docs/superpowers/plans/2026-10-12-stage-6-minimal-activity-awareness.md`
 
-- [ ] **Step 1: Review the full diff** for policy scope, state-duration correctness, SQLite migration immutability, UI failure behavior, and accidental collection/persistence/network paths; fix findings.
-- [ ] **Step 2: Run full verification:** `pytest -q`, `python -m compileall -q src tests`, `python -m pip check`, `git diff --check`, and focused secret/debug/activity-data scans.
-- [ ] **Step 3: Re-review the staged diff and Git status.** Confirm no real OS polling occurred during tests, no temporary artifacts are staged, and the only durable activity setting is the opt-in boolean.
+- [x] **Step 1: Review the full diff** for policy scope, state-duration correctness, SQLite migration immutability, UI failure behavior, and accidental collection/persistence/network paths; fix findings.
+- [x] **Step 2: Run full verification:** `QT_QPA_PLATFORM=offscreen python -m pytest -q -p no:cacheprovider` (370 passed), `compileall` with bytecode redirected to the temp directory, `pip check`, `git diff --check`, and focused secret/debug/activity-data scans.
+- [x] **Step 3: Re-review the staged diff and Git status.** Confirm no real OS polling occurred during tests, no temporary artifacts are staged, and the only durable activity setting is the opt-in boolean.
 - [ ] **Step 4: Commit** with `feat: add opt-in local activity awareness`.
 - [ ] **Step 5: Record** the actual commit hash and verification in the completion record and overnight report. Stop before manual Windows experience testing; the user should first review the new opt-in control and verify expected idle behavior on their own machine.

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from companion.application.chat_context import DailyChatContextBuilder
 from companion.application.chat_service import ChatService
+from companion.application.activity_awareness_service import ActivityAwarenessService
 from companion.application.proactive_reminder_service import ProactiveReminderService
 from companion.application.task_service import TaskService
 from companion.domain.errors import StorageError
@@ -25,6 +26,7 @@ from companion.infrastructure.sqlite.chat_repositories import (
     SQLiteChatSettingsRepository,
     SQLiteConversationRepository,
 )
+from companion.infrastructure.sqlite.activity_preferences import SQLiteActivityPreferencesRepository
 from companion.infrastructure.sqlite.database import SQLiteDatabase, default_database_path
 from companion.infrastructure.sqlite.repositories import (
     SQLiteCalendarRepository,
@@ -35,6 +37,7 @@ from companion.infrastructure.sqlite.repositories import (
     SQLiteTaskRepository,
 )
 from companion.infrastructure.windows_credentials import WindowsCredentialStore
+from companion.infrastructure.windows_activity import WindowsIdleActivitySource
 
 
 def build_task_service(database: SQLiteDatabase, clock: SystemClock) -> TaskService:
@@ -92,16 +95,22 @@ class CompanionApplication(QApplication):
             return
 
         self.chat_service: ChatService | None = None
+        self.activity_awareness_service: ActivityAwarenessService | None = None
         chat_storage_error = None
         try:
             database = factory(database_path)
             database.initialize()
             self.task_service: TaskService | None = build_task_service(database, self.clock)
+            self.activity_awareness_service = ActivityAwarenessService(
+                WindowsIdleActivitySource(),
+                SQLiteActivityPreferencesRepository(database),
+            )
             self.reminder_service: ProactiveReminderService | None = ProactiveReminderService(
                 self.clock,
                 self.task_service,
                 SQLiteReminderRepository(database),
                 SQLiteReminderPreferencesRepository(database),
+                activity=self.activity_awareness_service,
             )
             storage_error = None
         except StorageError:
@@ -121,6 +130,7 @@ class CompanionApplication(QApplication):
             storage_error,
             clock=self.clock,
             reminder_service=self.reminder_service,
+            activity_awareness_service=self.activity_awareness_service,
             chat_service=self.chat_service,
         )
         if chat_storage_error:

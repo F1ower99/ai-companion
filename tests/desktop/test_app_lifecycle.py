@@ -80,6 +80,7 @@ def run_application_script(code, database_path):
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["AI_COMPANION_TEST_DB"] = str(database_path)
+    env["LOCALAPPDATA"] = str(database_path.parent / "local-app-data")
     source_root = str(Path(__file__).resolve().parents[2] / "src")
     env["PYTHONPATH"] = source_root + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(
@@ -90,6 +91,17 @@ def run_application_script(code, database_path):
         timeout=10,
         check=False,
     )
+
+
+def test_application_subprocess_uses_test_local_app_data(tmp_path):
+    result = run_application_script(
+        "from companion.infrastructure.sqlite.database import default_database_path; "
+        "print(default_database_path())",
+        tmp_path / "companion.sqlite3",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert Path(result.stdout.strip()).is_relative_to(tmp_path)
 
 
 def test_app_injects_local_database_and_task_service(tmp_path):
@@ -171,4 +183,41 @@ assert "private-path-and-record-content" not in app.chat_window.storage_status.t
 app.pet_window.close()
 '''
     result = run_application_script(code, tmp_path / "unused.sqlite3")
+    assert result.returncode == 0, result.stderr
+
+
+def test_app_composes_disabled_activity_awareness_without_os_polling(tmp_path):
+    code = '''
+import os
+from pathlib import Path
+from companion.domain.reminders import ActivitySnapshot, ActivityState
+from companion.infrastructure.sqlite.database import SQLiteDatabase
+from companion.desktop import app as app_module
+
+class FakeWindowsActivitySource:
+    available = True
+    instances = []
+    def __init__(self):
+        self.calls = 0
+        self.resets = 0
+        self.__class__.instances.append(self)
+    def snapshot(self, at):
+        self.calls += 1
+        return ActivitySnapshot(ActivityState.FOCUSED, at, at)
+    def reset(self):
+        self.resets += 1
+
+app_module.WindowsIdleActivitySource = FakeWindowsActivitySource
+def factory(_default_path):
+    return SQLiteDatabase(Path(os.environ["AI_COMPANION_TEST_DB"]))
+
+app = app_module.create_application(["companion-stage6-test"], database_factory=factory)
+assert app.activity_awareness_service is app.reminder_service.activity
+assert app.activity_awareness_service.get_preferences().enabled is False
+assert FakeWindowsActivitySource.instances[0].calls == 0
+app.reminder_scheduler.evaluate_now()
+assert FakeWindowsActivitySource.instances[0].calls == 0
+app.pet_window.close()
+'''
+    result = run_application_script(code, tmp_path / "stage6-app.sqlite3")
     assert result.returncode == 0, result.stderr

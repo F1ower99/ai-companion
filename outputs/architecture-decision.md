@@ -4,9 +4,9 @@
 
 ## 产品目标与首版边界
 
-目标是做一个本地优先、长期了解学习目标的 Windows 个人 Companion。Agent Core 接收当前应用、空闲时长、当天任务与记忆，先用可解释的本地策略决定何时提醒；LLM 负责对话和协商措辞，不能越过用户设定的时间边界。桌宠、聊天窗、托盘和语音都是独立适配层，不能承载计划或决策规则。
+目标是做一个本地优先、长期了解学习目标的 Windows 个人 Companion。Agent Core 接收可选的粗粒度活动状态、当天任务与记忆，先用可解释的本地策略决定何时提醒；LLM 负责对话和协商措辞，不能越过用户设定的时间边界。桌宠、聊天窗、托盘和语音都是独立适配层，不能承载计划或决策规则。
 
-首版聚焦可实际验证的闭环：桌宠与聊天窗（含拖动和托盘控制的鼠标穿透开关）、SQLite 任务和记忆、前台应用时长、规则型决策、主动提醒和延期计时、文字对话、按键后录音的语音输入与 TTS。日历规则先建好数据模型，课程导入界面可以后置。默认不截图、不记录标题栏文字、键盘内容或聊天内容来推断活动；监测与麦克风都有显式开关。开机启动必须是可配置且默认关闭的设置。
+首版聚焦可实际验证的闭环：桌宠与聊天窗（含拖动和托盘控制的鼠标穿透开关）、SQLite 任务和记忆、可选的粗粒度 idle/recently-active 状态、规则型决策、主动提醒和延期计时、文字对话、按键后录音的语音输入与 TTS。日历规则先建好数据模型，课程导入界面可以后置。活动感知默认关闭；启用后只读取当前 Windows 会话的最后输入时间差，不识别前台应用，也不记录输入内容、标题栏文字、屏幕画面或聊天内容。活动状态不保留历史，监测与麦克风都有显式开关。开机启动必须是可配置且默认关闭的设置。
 
 ## 技术路线
 
@@ -44,12 +44,12 @@ flowchart TD
   APP --> STORE[SQLite Repository]
   APP --> PORTS[Provider Ports: LLM / STT / TTS]
   AGENT --> DOMAIN[Goals / Tasks / Activity / Calendar / Memory]
-  APP --> WIN[Windows Adapters: foreground app / idle / notifications]
+  APP --> WIN[Windows Adapters: session idle / notifications]
   APP --> AUDIO[Audio Adapter: explicit push-to-talk]
   PORTS --> REMOTE[Selected cloud or local provider]
 ```
 
-`companion.domain` 不导入 PySide6、Windows API、数据库连接或厂商 SDK。`companion.application` 编排用例并通过 Protocol 接口访问存储、活动、语音和模型。Windows/Desktop adapters 只负责系统数据获取与呈现。LLM 的云端调用仅发送当前用户消息、本机回复语言/语气/原则设置和用户单独启用的上下文；每次发送前 UI 展示 provider host 与当前 payload 类别，首次或分享范围变化时要求明确确认。活动记录默认留在 SQLite。
+`companion.domain` 不导入 PySide6、Windows API、数据库连接或厂商 SDK。`companion.application` 编排用例并通过 Protocol 接口访问存储、活动、语音和模型。Windows/Desktop adapters 只负责系统数据获取与呈现。LLM 的云端调用仅发送当前用户消息、本机回复语言/语气/原则设置和用户单独启用的上下文；每次发送前 UI 展示 provider host 与当前 payload 类别，首次或分享范围变化时要求明确确认。Stage 6 活动偏好只保存启用位；活动 snapshot 和时间仅在进程内传给决策服务，不会写入 SQLite 或 provider payload。
 
 ```text
 src/companion/
@@ -88,13 +88,13 @@ SQLite 连接启用外键、迁移版本和事务。API Key 放在 Windows Crede
 
 每 30 秒至一分钟由本地 scheduler 发起一次 tick；不使用 LLM 决定是否打断。
 
-1. **Observe**：读取前台进程名、活动连续时长、idle time、当天未完成任务、硬截止、最近提醒和用户开关。Windows 使用 `GetForegroundWindow` → `GetWindowThreadProcessId` 获取前台进程，`GetLastInputInfo` 估算当前登录会话的 idle time。
+1. **Observe**：读取可选的 `idle / focused / unknown` 粗状态、当天未完成任务、硬截止、最近提醒和用户开关。Stage 6 使用 `GetLastInputInfo` 估算当前交互会话距最后输入的时间；五分钟内报告 `focused`，五分钟及以上报告 `idle`。不查询进程、前台窗口或窗口标题。
 2. **Think**：基于任务优先级、剩余目标、计划额度、历史延期行为，生成结构化 `InterventionContext` 和原因码。最多取回有限条相关记忆。
 3. **Decide**：可解释规则评估 `interrupt / wait / stay_silent`。当活动不足阈值、用户空闲、已经提醒过、提醒关闭、无紧迫未完成任务时保持沉默。P0/硬截止优先，P1 可协商，P2 只建议。
 4. **Act**：以统一 `ReminderEvent` 发到 UI；允许 TTS provider 播报，但可被用户静音/打断。用户提出延期时，Decision Service 检查剩余计划与 `hard_end`，记录一次性 `extension_deadline`，不覆盖原始硬截止。
 5. **Remember**：仅写入决策原因、接受/拒绝/延期结果、任务完成和简短事件摘要；不把整个 prompt 或系统活动明细当记忆。
 
-验收策略样例：专注应用使用 30 分钟不提醒；连续使用 120 分钟且高优先级学习任务未完成时提醒；当天优先任务完成则允许继续个人项目；接受 20 分钟延期后保存 deadline，并在到期时再次提醒。默认空闲阈值为 300 秒、活动采样周期为 5 秒，两项都可在设置中调整。通知冷却与用户的“今天别提醒我”覆盖规则。
+验收策略样例：活动感知默认关闭；启用时最近输入和五分钟 idle 边界按确定性规则映射；连续 focused 状态与高优先级学习任务按 Stage 3 规则协商；当天优先任务完成后保持安静；接受 20 分钟延期后保存 deadline，并在到期时再次评估。空闲阈值固定为 300 秒；当前 scheduler 最多每 60 秒采样一次。通知冷却与用户的“今天别提醒我”覆盖规则。
 
 ## 技术风险与控制
 

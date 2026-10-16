@@ -53,8 +53,8 @@ def test_latest_schema_creates_stage_two_three_and_reminder_tables(migrated_conn
     } <= names
     assert {"task_reminder_state", "reminder_runtime_state", "reminder_events"} <= names
     assert {"academic_terms", "course_rules", "calendar_exceptions"} <= names
-    assert migrated_connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 4
-    assert LATEST_SCHEMA_VERSION == 4
+    assert migrated_connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 5
+    assert LATEST_SCHEMA_VERSION == 5
 
 
 def test_migration_is_idempotent(migrated_connection):
@@ -64,7 +64,7 @@ def test_migration_is_idempotent(migrated_connection):
     ).fetchone()[0] == 1
 
 
-def test_v1_data_upgrades_to_v4_with_stage_two_three_and_placeholder_preserved(tmp_path):
+def test_v1_data_upgrades_to_v5_with_stage_two_three_and_placeholder_preserved(tmp_path):
     connection = sqlite3.connect(tmp_path / "v1.sqlite3")
     connection.execute("PRAGMA foreign_keys = ON")
     try:
@@ -84,7 +84,7 @@ def test_v1_data_upgrades_to_v4_with_stage_two_three_and_placeholder_preserved(t
         )
         connection.commit()
         apply_migrations(connection)
-        assert migrations_module.read_schema_version(connection) == 4
+        assert migrations_module.read_schema_version(connection) == 5
         columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)")}
         assert "planned_start_at" in columns
         assert connection.execute("SELECT planned_start_at FROM tasks WHERE id='t1'").fetchone()[0] is None
@@ -129,7 +129,7 @@ def test_v2_upgrade_preserves_task_reminder_rows_and_existing_table_definitions(
         v2_statements = migrations_module.VERSION_TWO_STATEMENTS
         monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations)
         apply_migrations(connection)
-        assert migrations_module.read_schema_version(connection) == 4
+        assert migrations_module.read_schema_version(connection) == 5
         assert connection.execute("SELECT title FROM tasks WHERE id='t1'").fetchone()[0] == "Read"
         assert connection.execute(
             "SELECT snooze_until FROM task_reminder_state WHERE task_id='t1'"
@@ -163,7 +163,7 @@ def test_v3_conversation_rows_upgrade_with_sent_delivery_state(tmp_path, monkeyp
 
         monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations)
         apply_migrations(connection)
-        assert migrations_module.read_schema_version(connection) == 4
+        assert migrations_module.read_schema_version(connection) == 5
         assert connection.execute(
             "SELECT delivery_state FROM messages WHERE id = 'm1'"
         ).fetchone()[0] == "sent"
@@ -464,3 +464,30 @@ def test_database_open_error_is_sanitized(tmp_path):
     with pytest.raises(StorageError) as error:
         db.initialize()
     assert str(path_is_a_directory) not in str(error.value)
+
+
+def test_v4_upgrade_adds_disabled_activity_preferences_without_changing_v4_data(tmp_path, monkeypatch):
+    connection = sqlite3.connect(tmp_path / "v4-upgrade.sqlite3")
+    connection.execute("PRAGMA foreign_keys = ON")
+    original_migrations = migrations_module.MIGRATIONS
+    try:
+        monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations[:4])
+        apply_migrations(connection)
+        add_goal(connection)
+        add_task(connection)
+        connection.execute(
+            "INSERT INTO conversations(id, created_at, updated_at) VALUES (?, ?, ?)",
+            ("c1", "2026-10-01T00:00:00+00:00", "2026-10-01T00:00:00+00:00"),
+        )
+        connection.commit()
+
+        monkeypatch.setattr(migrations_module, "MIGRATIONS", original_migrations)
+        apply_migrations(connection)
+
+        assert migrations_module.read_schema_version(connection) == 5
+        assert connection.execute("SELECT enabled FROM activity_preferences WHERE id = 1").fetchone()[0] == 0
+        assert connection.execute("SELECT name FROM goals WHERE id='g1'").fetchone()[0] == "Study"
+        assert connection.execute("SELECT title FROM tasks WHERE id='t1'").fetchone()[0] == "Read"
+        assert connection.execute("SELECT id FROM conversations WHERE id='c1'").fetchone()[0] == "c1"
+    finally:
+        connection.close()
