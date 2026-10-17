@@ -182,6 +182,40 @@ def make_window(qtbot, service=None, **kwargs):
     return window, service
 
 
+def test_unconfigured_local_voice_controls_are_disabled(qtbot):
+    window, service = make_window(qtbot)
+    assert not window.push_to_talk_button.isEnabled()
+    assert not window.speak_reply_button.isEnabled()
+    assert '本地' in window.push_to_talk_button.toolTip()
+    assert '本地' in window.speak_reply_button.toolTip()
+    assert service.send_calls == []
+
+
+def test_voice_transcript_only_becomes_editable_draft_until_send(qtbot):
+    from companion.domain.voice import VoiceTranscript
+
+    window, service = make_window(qtbot)
+    assert window.accept_voice_transcript(VoiceTranscript('先背单词'))
+    assert window.composer.toPlainText() == '先背单词'
+    assert not window.composer.isReadOnly()
+    assert service.messages == []
+    assert service.send_calls == []
+    window.composer.setPlainText('先背单词，然后休息')
+    QTest.mouseClick(window.send_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not window.is_busy)
+    assert service.send_calls == [('conversation-1', '先背单词，然后休息')]
+
+
+def test_voice_transcript_cannot_overwrite_existing_draft(qtbot):
+    from companion.domain.voice import VoiceTranscript
+
+    window, service = make_window(qtbot)
+    window.composer.setPlainText('尚未发送的手写内容')
+    assert not window.accept_voice_transcript(VoiceTranscript('新的识别内容'))
+    assert window.composer.toPlainText() == '尚未发送的手写内容'
+    assert service.messages == []
+
+
 def test_missing_secret_keeps_draft_and_opens_provider_settings(qtbot):
     service = FakeChatService(configured=False)
     window, _ = make_window(qtbot, service)

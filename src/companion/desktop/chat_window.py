@@ -23,6 +23,7 @@ from companion.desktop.reminder_settings_dialog import ReminderSettingsDialog
 from companion.domain.chat import ChatRole, ProviderErrorCode
 from companion.domain.decisions import Decision, DecisionKind, ReasonCode
 from companion.domain.models import TaskStatus
+from companion.domain.voice import VoiceTranscript
 
 
 class ChatWindow(QDialog):
@@ -141,6 +142,17 @@ class ChatWindow(QDialog):
         composer_controls.addWidget(self.send_button)
         composer_controls.addWidget(self.cancel_button)
         composer_controls.addWidget(self.retry_button)
+        voice_controls = QHBoxLayout()
+        self.push_to_talk_button = QPushButton('按住说话')
+        self.push_to_talk_button.setObjectName('pushToTalkButton')
+        self.push_to_talk_button.setEnabled(False)
+        self.push_to_talk_button.setToolTip('尚未配置本地语音识别；麦克风未启用。')
+        self.speak_reply_button = QPushButton('朗读最新回复')
+        self.speak_reply_button.setObjectName('speakReplyButton')
+        self.speak_reply_button.setEnabled(False)
+        self.speak_reply_button.setToolTip('尚未配置本地语音合成。')
+        voice_controls.addWidget(self.push_to_talk_button)
+        voice_controls.addWidget(self.speak_reply_button)
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addWidget(self.status_label)
@@ -150,6 +162,7 @@ class ChatWindow(QDialog):
         layout.addWidget(self.composer)
         layout.addWidget(self.privacy_summary_label)
         layout.addLayout(composer_controls)
+        layout.addLayout(voice_controls)
 
         self.setStyleSheet(
             """
@@ -165,6 +178,17 @@ class ChatWindow(QDialog):
         )
         self._refresh_privacy_summary()
         self.refresh_transcript()
+
+    def accept_voice_transcript(self, transcript: VoiceTranscript) -> bool:
+        """Future voice workers hand off a draft; this never sends or stores it."""
+        if not isinstance(transcript, VoiceTranscript):
+            return False
+        if self.composer.toPlainText():
+            self.status_label.setText('输入框已有草稿，已保留原内容。')
+            return False
+        self.composer.setPlainText(transcript.text)
+        self.status_label.setText('语音草稿已放入输入框；编辑后可自行发送。')
+        return True
 
     def open_tasks(self) -> None:
         if self.task_service is None:
