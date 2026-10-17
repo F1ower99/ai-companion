@@ -7,7 +7,9 @@ from importlib import metadata
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from packaging.requirements import InvalidRequirement, Requirement
+from packaging.licenses import InvalidLicenseExpression, canonicalize_license_expression
 from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 
 @dataclass(frozen=True)
@@ -16,6 +18,7 @@ class PackageNotice:
     version: str
     license: str | None
     license_files: tuple[str, ...]
+    review_reasons: tuple[str, ...] = ()
 
 
 def collect_notices(requirements: list[str], distribution_lookup=metadata.distribution) -> list[PackageNotice]:
@@ -39,6 +42,13 @@ def collect_notices(requirements: list[str], distribution_lookup=metadata.distri
             raise ValueError(f'Missing installed distribution: {name}') from error
         if not distribution.version or not distribution.metadata.get('Name'):
             raise ValueError(f'Missing name/version metadata: {name}')
+        try:
+            actual_name = canonicalize_name(distribution.metadata['Name'], validate=True)
+            Version(distribution.version)
+            if actual_name != name:
+                raise ValueError('Distribution identity differs from dependency.')
+        except (ValueError, TypeError) as error:
+            raise ValueError(f'Invalid distribution metadata: {name}') from error
         if requirement.specifier and distribution.version not in requirement.specifier:
             raise ValueError(f'{name} {distribution.version} does not satisfy {requirement.specifier}')
         key = (name, frozenset(requirement.extras))
@@ -46,6 +56,12 @@ def collect_notices(requirements: list[str], distribution_lookup=metadata.distri
             continue
         visited.add(key)
         license_value = distribution.metadata.get('License-Expression') or distribution.metadata.get('License')
+        review_reasons = []
+        if license_value:
+            try:
+                canonicalize_license_expression(license_value)
+            except InvalidLicenseExpression:
+                review_reasons.append('Unparseable or unknown declared license; review original metadata.')
         license_files = []
         for file in distribution.files or ():
             path = str(file).replace('\\', '/')
@@ -58,6 +74,7 @@ def collect_notices(requirements: list[str], distribution_lookup=metadata.distri
             distribution.metadata['Name'], distribution.version,
             ' '.join(license_value.split()) if license_value else None,
             tuple(sorted(set(license_files))),
+            tuple(review_reasons),
         )
         pending.extend((child, frozenset(requirement.extras)) for child in distribution.requires or ())
     return [notices[name] for name in sorted(notices)]
@@ -79,6 +96,7 @@ def render_notices(notices: list[PackageNotice]) -> str:
         lines.append(f'| {_cell(notice.name)} | {_cell(notice.version)} | {_cell(notice.license or "REVIEW REQUIRED: missing license metadata")} |')
     for notice in notices:
         lines.extend(['', f'## {_cell(notice.name)}', '', 'License file paths in the installed distribution:'])
+        lines.extend(f'- REVIEW REQUIRED: {_cell(reason)}' for reason in notice.review_reasons)
         lines.extend(f'- `{_cell(path)}`' for path in notice.license_files)
         if not notice.license_files:
             lines.append('- REVIEW REQUIRED: no license files recorded in distribution metadata.')

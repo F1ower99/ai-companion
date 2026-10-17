@@ -63,3 +63,24 @@ def test_version_mismatch_is_not_claimed_verified():
     module = load_script('write_third_party_notices')
     with pytest.raises(ValueError, match='does not satisfy'):
         module.collect_notices(['example==2'], lambda name: dist('example', '1.0'))
+
+
+@pytest.mark.parametrize('expression,legacy', [
+    ('MIT OR ???', None), (None, 'UNKNOWN'), (None, 'NOASSERTION'),
+    (None, 'custom license text requiring review'),
+])
+def test_unparseable_license_is_preserved_and_flagged_even_with_license_file(expression, legacy):
+    module = load_script('write_third_party_notices')
+    value = dist('example', expression=expression, license=legacy, files=['example.dist-info/licenses/LICENSE'])
+    rendered = module.render_notices(module.collect_notices(['example'], lambda name: value))
+    assert 'REVIEW REQUIRED' in rendered
+    assert (expression or legacy) in rendered
+
+
+@pytest.mark.parametrize('name,version', [
+    ('example', 'not a version'), ('not a valid name', '1.0'), ('another-package', '1.0'),
+])
+def test_invalid_or_mismatched_identity_metadata_is_rejected(name, version):
+    module = load_script('write_third_party_notices')
+    with pytest.raises(ValueError, match='Invalid distribution metadata'):
+        module.collect_notices(['example'], lambda _: dist(name, version))

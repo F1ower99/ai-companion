@@ -16,7 +16,7 @@ dependencies = [
 dev = [
     "pytest>=8,<9",
     "pytest-qt>=4.4,<5",
-    "packaging>=23,<27",
+    "packaging>=26,<27",
 ]
 deploy = [
     "Nuitka==4.1.1",
