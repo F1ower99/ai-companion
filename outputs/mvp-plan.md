@@ -158,6 +158,8 @@ Stage 3 已完成旧阶段号里的决策与延期模型；Stage 6 实现仅凭�
 
 Stage 7A 已实现 provider-neutral 本地语音会话基础：PCM/转写校验、local-only ports、取消/打断及迟到结果隔离，Qt 转写只交接到空草稿。未配置真实引擎/设备适配器，语音按钮保持禁用。真实设备、自动到时停录、录音状态 UI、离线引擎选型仍待后续集成。云端语音不属于当前批准范围。
 
+Stage 7B 已建立 standalone 配置、无删除的构建入口、独立构建目录和依赖许可元数据清单。当前环境缺少 MSVC 与构建依赖，preflight 已正确阻止构建；未生成 exe，部署 dry-run 与真实打包/启动验收均未完成。说明见 README；临时 LOCALAPPDATA 不能隔离 Credential Manager，凭据验收需要单独 Windows 测试账号。
+
 **文件：**
 
 - 新建 `src/companion/ports/voice.py`、`adapters/voice/push_to_talk.py`、`tts.py`、`stt_provider.py`。

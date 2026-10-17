@@ -33,8 +33,9 @@ Prepare a repeatable Windows standalone build of the current AI Companion app, s
 
 ## Build and license inventory
 
-- `pysidedeploy.spec` names the app, project directory, source entry point, and explicit standalone mode; output is under `dist/AICompanion`.
+- `pysidedeploy.spec` names the app, project directory, source entry point, and explicit standalone mode. The wrapper stages each invocation in a fresh `build/windows/build-<id>` directory and writes output under `dist/build-<id>/AICompanion.dist/app.exe`; previous builds are preserved.
 - `scripts/build_windows.ps1` verifies all prerequisites before invoking `pyside6-deploy`, uses the current virtual environment, and never performs recursive cleanup. Existing build output is retained unless the user explicitly removes it.
+- Installed Qt 6.11.2 has no `--no-install` flag and performs pre-build cleanup even in dry-run mode. Its empty `python.packages` field explicitly skips package installation; the wrapper requires already installed deployment packages and invokes the tool only in a fresh staging tree. No compiler/download confirmation is supplied. A changed Qt version requires revalidation.
 - `scripts/write_third_party_notices.py` reads installed distribution metadata from the active interpreter and writes a deterministic inventory of packages included by the app's declared dependencies. It records package/version/license expression and license files when present; it reports packages with absent/unparseable metadata instead of inventing a license.
 - `THIRD_PARTY_NOTICES.md` is generated only from verified metadata and checked in alongside the build configuration.
 - `README.md` explains prerequisites, build command, standalone output path, clean-profile launch, data/credential locations, and the remaining manual review required before redistribution.
