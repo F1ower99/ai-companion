@@ -156,6 +156,8 @@ Stage 3 已完成旧阶段号里的决策与延期模型；Stage 6 实现仅凭�
 
 ### 阶段 7：基础语音、打包和首版验收
 
+Stage 7A 已实现 provider-neutral 本地语音会话基础：PCM/转写校验、local-only ports、取消/打断及迟到结果隔离，Qt 转写只交接到空草稿。未配置真实引擎/设备适配器，语音按钮保持禁用。真实设备、自动到时停录、录音状态 UI、离线引擎选型仍待后续集成。云端语音不属于当前批准范围。
+
 **文件：**
 
 - 新建 `src/companion/ports/voice.py`、`adapters/voice/push_to_talk.py`、`tts.py`、`stt_provider.py`。
@@ -169,8 +171,8 @@ Stage 3 已完成旧阶段号里的决策与延期模型；Stage 6 实现仅凭�
 - `VoiceSession.start_push_to_talk() -> None`、`stop_capture() -> None`、`interrupt_output() -> None`。
 - 录音仅在按住/点击麦克风控件后开始；UI 显示 Listening/Talking 状态；用户打断立即停止当前 TTS。
 
-- [ ] 写 voice session 测试：停录送 STT、取消不送出、用户插话调用 TTS.stop、麦克风不可用有清晰错误。
-- [ ] 安装 `.[voice]`（其中 `PySide6-Addons==6.11.2` 与 Essentials 匹配），以 Qt Multimedia 采集/播放音频；第一 provider 可使用用户显式配置的云端 STT/TTS，上传前 UI 显示 provider 和数据类型。
+- [x] 写 fake-provider voice session 测试：停录送 STT、取消不送出、用户插话调用 TTS.stop、错误码、音频清理及并发隔离。
+- [ ] 选择本地离线语音引擎，再安装 `.[voice]`（`PySide6-Addons==6.11.2`）并实现 Qt Multimedia 采集/播放；不接入云端语音。
 - [ ] 运行全量测试和 `python -m companion.desktop.app`；构建 Windows 包后在新用户配置目录启动一次。
 - [ ] 完整复核私密数据目录、暂停监测、暂停麦克风、删除记忆、清除历史、关闭主动提醒五项控制。
 - [ ] 添加开机启动设置，默认关闭；只写当前用户 Run 项，用户关闭时删除本应用自己的条目。

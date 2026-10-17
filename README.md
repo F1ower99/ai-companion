@@ -19,6 +19,8 @@ Goals, tasks, basic memories, reminder preferences, reminder state, reason-code 
 
 ## Tests
 
+Stage 7A provides a Qt-free local voice-session foundation: bounded transient PCM, local-only provider ports, explicit transcription/speech operations, cancellation, and interruption. Real speech engines and hardware adapters are not configured, so voice buttons remain disabled and startup does not access a microphone. A validated transcript can enter an empty editable draft; sending still requires the existing explicit Send action. Audio and transient voice state never enter SQLite or provider context. The local speech-stack choice is recorded in `OPEN_QUESTIONS.md`.
+
 From PowerShell, activate the development environment and run:
 
 ```powershell

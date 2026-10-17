@@ -34,6 +34,9 @@ class VoiceSession:
         self._capture_running = False
         self._capture_token: CancellationFlag | None = None
         self._speech_token: CancellationFlag | None = None
+        self._speech_working = False
+        self._speech_cleaning = False
+        self._speech_needs_stop = False
         self._status = VoiceStatus(self._rest_state())
 
     @property
@@ -67,24 +70,25 @@ class VoiceSession:
         with self._lock:
             if not self.can_capture:
                 return VoiceStatus(VoiceState.UNAVAILABLE, VoiceErrorCode.NOT_CONFIGURED)
-            if self._capture_working or self._capture_running or self._capture_cleaning:
+            if self._capture_working or self._capture_running or self._capture_cleaning or self._speech_cleaning:
                 return self._busy()
-            speaking = self._speech_token is not None
-        if speaking:
-            stopped = self.interrupt_output()
-            if stopped.error_code is VoiceErrorCode.SPEECH_FAILED:
-                return stopped
-        with self._lock:
-            if not self.can_capture:
-                return VoiceStatus(VoiceState.UNAVAILABLE, VoiceErrorCode.NOT_CONFIGURED)
-            if self._capture_working or self._capture_running or self._capture_cleaning:
-                return self._busy()
-            self._generation += 1
-            generation = self._generation
-            self._capture_token = CancellationFlag()
+            # Reserve before releasing the lock: speech cannot start in the
+            # gap between inspecting playback and stopping it.
             self._capture_working = True
-            self._status = VoiceStatus(VoiceState.LISTENING)
+            token = self._capture_token = CancellationFlag()
+            speaking = self._speech_token is not None or self._speech_needs_stop
+        generation = None
         try:
+            if speaking:
+                stopped = self.interrupt_output()
+                if stopped.error_code in (VoiceErrorCode.SPEECH_FAILED, VoiceErrorCode.BUSY):
+                    return stopped
+            with self._lock:
+                if self._closed or token.is_cancelled():
+                    return self._status
+                self._generation += 1
+                generation = self._generation
+                self._status = VoiceStatus(VoiceState.LISTENING)
             self._capture.start()
         except Exception as error:
             self._discard_capture(self._capture)
@@ -101,6 +105,8 @@ class VoiceSession:
         finally:
             with self._lock:
                 self._capture_working = False
+                if not self._capture_running and self._capture_token is token:
+                    self._capture_token = None
         return self.status
 
     def stop_capture(self) -> VoiceTranscript | None:
@@ -168,7 +174,7 @@ class VoiceSession:
         with self._lock:
             if not self.can_speak:
                 return VoiceStatus(VoiceState.UNAVAILABLE, VoiceErrorCode.NOT_CONFIGURED)
-            if self._capture_working or self._capture_running or self._capture_cleaning or self._speech_token:
+            if self._capture_working or self._capture_running or self._capture_cleaning or self._speech_token or self._speech_cleaning:
                 return self._busy()
             try:
                 text = VoiceTranscript(text).text
@@ -177,20 +183,37 @@ class VoiceSession:
             self._generation += 1
             generation = self._generation
             token = self._speech_token = CancellationFlag()
+            self._speech_working = True
+            self._speech_needs_stop = True
             self._status = VoiceStatus(VoiceState.SPEAKING)
         failed = False
         try:
             self._tts.speak(text, token)
         except Exception:
             failed = True
-            try:
-                self._tts.stop()
-            except Exception:
-                pass
+            with self._lock:
+                cleanup = self._speech_token is token and not token.is_cancelled() and not self._speech_cleaning
+                if cleanup:
+                    token.cancel()
+                    self._speech_cleaning = True
+            if cleanup:
+                stop_failed = False
+                try:
+                    self._tts.stop()
+                except Exception:
+                    stop_failed = True
+                finally:
+                    with self._lock:
+                        self._speech_cleaning = False
+                        self._speech_needs_stop = stop_failed
         finally:
             with self._lock:
-                if generation == self._generation:
+                self._speech_working = False
+                if not token.is_cancelled() and not failed:
+                    self._speech_needs_stop = False
+                if self._speech_token is token and not self._speech_cleaning and not self._speech_needs_stop:
                     self._speech_token = None
+                if generation == self._generation:
                     self._status = VoiceStatus(
                         VoiceState.ERROR if failed else self._rest_state(),
                         VoiceErrorCode.SPEECH_FAILED if failed else None,
@@ -199,22 +222,37 @@ class VoiceSession:
 
     def interrupt_output(self) -> VoiceStatus:
         with self._lock:
-            if self._speech_token is None:
+            if self._speech_token:
+                self._speech_token.cancel()
+            if self._speech_cleaning:
+                return self._busy()
+            if self._speech_token is None and not self._speech_needs_stop:
                 return self._status
-            self._speech_token.cancel()
-            self._speech_token = None
+            self._speech_cleaning = True
             self._generation += 1
-            self._status = VoiceStatus(self._rest_state())
+            generation = self._generation
+        failed = False
         try:
             self._tts.stop()
         except Exception:
+            failed = True
+        finally:
             with self._lock:
-                self._status = VoiceStatus(VoiceState.ERROR, VoiceErrorCode.SPEECH_FAILED)
+                self._speech_cleaning = False
+                self._speech_needs_stop = failed
+                if not self._speech_working and not failed:
+                    self._speech_token = None
+                if generation == self._generation:
+                    self._status = VoiceStatus(
+                        VoiceState.ERROR if failed else self._rest_state(),
+                        VoiceErrorCode.SPEECH_FAILED if failed else None,
+                    )
         return self.status
 
     def close(self) -> None:
         with self._lock:
             self._closed = True
+            self._generation += 1
         self.cancel_capture()
         self.interrupt_output()
         with self._lock:

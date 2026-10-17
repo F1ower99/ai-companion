@@ -14,7 +14,7 @@ The local STT engine is a product choice with meaningful effects on language sup
 - Define a Qt-free, injectable `VoiceSession` state machine for push-to-talk, transcription, transcript handoff, explicit speech playback, cancellation, and interruption.
 - Keep audio and transcript transient in the voice layer. A final transcript is placed in the chat composer for the user to inspect; only the existing Send action may send text to a configured chat provider.
 - Require voice providers to declare local execution. The service rejects network-backed providers in this stage.
-- Request microphone permission only after the user invokes push-to-talk. Denied permission, unavailable hardware, and provider errors return a safe visible state without crashing chat or reminders.
+- Define the future capture adapter's permission gate: only an explicit push-to-talk action may request permission. Fake adapters exercise safe denied-permission/error handling; real hardware wiring is deferred.
 - Add a compact voice affordance to the existing companion chat, disabled with a clear explanation until a local STT provider is selected and composed.
 - Keep automated tests isolated from the user's real SQLite profile, credentials, microphone, and Windows startup settings.
 
@@ -51,13 +51,13 @@ The local STT engine is a product choice with meaningful effects on language sup
 - `AudioCaptureSource`: start, stop-and-return-memory-chunk, and cancel/discard operations.
 - `STTProvider`: `local_only is True`; transcribes an in-memory chunk with a cancellation token and returns a transcript.
 - `TTSProvider`: `local_only is True`; speaks explicitly selected text, exposes `stop()`, and accepts cancellation.
-- `VoiceSession`: Qt-free coordinator with injected capture/STT/TTS ports and a state observer. It owns one operation at a time and does not depend on ChatService, SQLite, Qt, or the system clock.
+- `VoiceSession`: Qt-free synchronous coordinator with injected capture/STT/TTS ports and a read-only status. The caller owns worker scheduling and presentation; blocking provider operations must not run on the Qt thread. It does not depend on ChatService, SQLite, Qt, or the system clock.
 
 ## Voice lifecycle
 
 1. At startup, the app does not query microphone devices or request permission. Without a local STT provider, the voice control remains disabled and says that local speech recognition is not configured.
 2. When configured, a user invokes push-to-talk. The adapter checks/request microphone permission in response to that action, interrupts any active TTS, and starts capture. No audio is sampled before permission is granted.
-3. Stop ends capture and releases the device before transcription. Capture is capped at 60 seconds; reaching the cap stops the device and begins local transcription with a visible maximum-duration notice. The service drops audio references and clears mutable capture buffers after the local provider returns or fails.
+3. Stop ends capture and releases the device before transcription. A future real capture adapter must cap recording at 60 seconds and notify its controller to stop/transcribe at the limit. This slice validates transferred PCM against that limit and clears it after provider completion/failure; it does not implement a real timer or device adapter.
 4. A successful transcript moves to `transcript_ready` and is passed to the UI composer. It is never sent to ChatService automatically. The user may edit, discard, or press Send under Stage 5's existing disclosure flow.
 5. Cancel discards buffered audio and any unsent transcript created by the active capture. Cancellation never invokes STT or ChatService.
 6. Assistant speech starts only from an explicit per-reply Speak control. Starting push-to-talk calls `TTSProvider.stop()` immediately. A TTS error does not alter or delete the text reply.
@@ -65,7 +65,7 @@ The local STT engine is a product choice with meaningful effects on language sup
 
 ## UI interaction
 
-- Keep the character and compact chat window primary. Place a small push-to-talk control beside the composer and a small Speak action on assistant replies.
+- Keep the character and compact chat window primary. Place a small push-to-talk control beside the composer and a Speak-latest-reply action for the existing single-pane transcript; per-message controls can follow real TTS integration.
 - Push-to-talk is visibly disabled when no local STT provider exists; Speak is independently disabled when no local TTS provider exists. Each disabled action explains which local capability is missing. No microphone permission is requested until an enabled push-to-talk action.
 - While recording, show a clear `Listening` state and a Stop action. Cancellation is separate from stopping-and-transcribing.
 - Show the resulting transcript in the normal composer, where it can be edited before sending.
@@ -93,7 +93,7 @@ Qt Multimedia exposes the audio device/source/sink APIs, and microphone access u
 ## Test strategy
 
 - Domain/application tests with fake capture, local STT, TTS, and cancellation: permission denial path, start/stop, transcript not auto-sent, cancel discards audio, TTS stop on PTT, failed provider cleanup, bounded capture, and stale worker result rejection.
-- Qt tests inject a fake `VoiceSession`; assert disabled controls request no permission, recording state is visible, transcript only fills the composer, and Send stays an explicit action.
+- Qt tests assert disabled controls have missing-provider explanations and validated transcript handoff only fills an empty editable composer. Existing drafts remain intact and Send stays explicit. Live recording-state wiring is deferred with the adapter.
 - Run the complete existing suite with `QT_QPA_PLATFORM=offscreen`, `compileall`, `pip check`, and staged diff/secret checks.
 - A human Windows acceptance run is still required for microphone permission, a real local speech engine, packaged startup in a clean profile, and device interruption behavior. Stage 7A will not claim those manual tests passed.
 

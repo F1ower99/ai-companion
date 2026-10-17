@@ -1,4 +1,5 @@
 import pytest
+from threading import Event, Thread
 
 from companion.application.voice_session import VoiceSession
 from companion.domain.errors import ValidationError
@@ -231,3 +232,66 @@ def test_new_capture_cannot_overlap_cancel_cleanup():
     capture.cancel = cancel
     session.cancel_capture()
     assert session.status.state is VoiceState.IDLE
+
+
+def test_capture_waits_for_speech_cleanup_and_old_failure_cannot_stop_replacement():
+    session, capture, _, tts = configured()
+    speaking, finish_speech, stopping, finish_stop = Event(), Event(), Event(), Event()
+
+    def old_speech(token):
+        speaking.set()
+        assert finish_speech.wait(3)
+        raise RuntimeError('late old failure')
+
+    def slow_stop():
+        tts.stops += 1
+        stopping.set()
+        assert finish_stop.wait(3)
+
+    tts.callback, tts.stop = old_speech, slow_stop
+    worker = Thread(target=lambda: session.speak('old'))
+    interrupter = Thread(target=session.interrupt_output)
+    worker.start()
+    try:
+        assert speaking.wait(3)
+        interrupter.start()
+        assert stopping.wait(3)
+        capture_result = session.start_push_to_talk()
+        finish_stop.set()
+        interrupter.join(3)
+        replacement = session.speak('new')
+    finally:
+        finish_stop.set()
+        finish_speech.set()
+        worker.join(3)
+        if interrupter.ident:
+            interrupter.join(3)
+    assert capture_result.error_code is VoiceErrorCode.BUSY
+    assert capture.events == []
+    assert replacement.error_code is VoiceErrorCode.BUSY
+    assert tts.stops == 1
+    tts.callback = None
+    assert session.speak('new').state is VoiceState.IDLE
+
+
+def test_push_to_talk_reserves_transition_before_interrupting_speech():
+    capture, stt, tts = Capture(), STT(), TTS()
+    competing_results = []
+
+    class InterleavedSession(VoiceSession):
+        def interrupt_output(self):
+            result = super().interrupt_output()
+            competing_results.append(self.speak('competing speech'))
+            return result
+
+    session = InterleavedSession(capture, stt, tts)
+
+    def begin_capture(token):
+        tts.callback = None
+        session.start_push_to_talk()
+
+    tts.callback = begin_capture
+    session.speak('old speech')
+    assert competing_results[0].error_code is VoiceErrorCode.BUSY
+    assert tts.text == 'old speech'
+    assert session.status.state is VoiceState.LISTENING
