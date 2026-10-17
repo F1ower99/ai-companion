@@ -34,10 +34,10 @@
 
 **Interfaces:** `collect_notices(requirements: list[str], distribution_lookup=importlib.metadata.distribution)->list[PackageNotice]`; `render_notices(notices)->str`. CLI reads runtime requirements from installed `ai-companion` metadata or explicit requirement arguments, traverses applicable Requires-Dist entries, records name/version/license-expression-or-license/license-file paths, sorts by normalized name, and fails with clear missing metadata diagnostics. No current-time stamp or absolute machine paths in generated output.
 
-- [ ] Write fixture-metadata tests for deterministic ordering, cyclic requirements, environment markers, license expression precedence, missing license flags, and missing distributions.
-- [ ] Run focused tests and verify missing utility failure.
-- [ ] Implement the metadata utility; use a declared development parser dependency if required rather than a custom requirement parser.
-- [ ] Run focused tests; generate notices from this interpreter's installed runtime closure and inspect actual metadata.
+- [x] Write fixture-metadata tests for deterministic ordering, cyclic requirements, environment markers, license expression precedence, missing license flags, and missing distributions.
+- [x] Run focused tests and verify missing utility failure.
+- [x] Implement the metadata utility; use a declared development parser dependency if required rather than a custom requirement parser.
+- [x] Run focused tests; generate notices from this interpreter's installed runtime closure and inspect actual metadata.
 
 ### Task 2: Deployment Configuration and Safe Preflight
 
@@ -45,18 +45,18 @@
 
 **Interfaces:** `build_windows.ps1 [-VenvPath PATH] [-PreflightOnly] [-DryRun]`; default venv is repo `.venv`, while `-VenvPath` supports this existing shared development environment. Validate Windows, virtual-environment identity, pyside6-deploy and dumpbin before deployment. Invoke deployment with config, explicit standalone mode and `--no-install` only if supported by installed 6.11.2; otherwise fail closed or construct an equivalent offline invocation after inspecting that version. Output under `dist/`; preserve compiler artifacts. Do not install system/build tools automatically.
 
-- [ ] Add executable controlled-input preflight tests for missing prerequisites and paths containing spaces; validate config through its parser, not substring checks.
-- [ ] Run tests and confirm absent build interface fails.
-- [ ] Implement config/preflight, inspect installed tool's actual CLI/template, and align documented standalone output with actual tool behavior. Record any version-specific ruling.
-- [ ] Run preflight; run deployment dry-run only if available without installation. Attempt a real build only with an already functional toolchain; accurately record any blocker.
+- [x] Add executable controlled-input preflight tests for missing prerequisites and paths containing spaces; validate config through its parser, not substring checks.
+- [x] Run tests and confirm absent build interface fails.
+- [x] Implement config/preflight, inspect installed tool's actual CLI/template, and align documented standalone output with actual tool behavior. Record any version-specific ruling.
+- [x] Run preflight; run deployment dry-run only if available without installation. Attempt a real build only with an already functional toolchain; accurately record any blocker.
 
 ### Task 3: Build Guide, Review, and Stage Commit
 
 **Files:** Update README, roadmap and `docs/superpowers/tasks/2026-10-17-stage-7b-windows-packaging.md`.
 
-- [ ] Document exact prerequisite install command, build/preflight command, actual output path, temporary LOCALAPPDATA launch, credential boundary, and manual pet/chat/reminder/tray checks.
-- [ ] Run full pytest, compileall, pip check, and diff/secret checks. Review the stage with a fresh reviewer and fix important issues with tests.
-- [ ] Commit the packaging stage independently and record actual verification/toolchain limitations. No push/merge or public binary release.
+- [x] Document exact prerequisite install command, build/preflight command, actual output path, temporary LOCALAPPDATA launch, credential boundary, and manual pet/chat/reminder/tray checks.
+- [x] Run full pytest, compileall, pip check, and diff/secret checks. Review the stage with a fresh reviewer and fix important issues with tests.
+- [x] Commit the packaging stage independently and record actual verification/toolchain limitations. No push/merge or public binary release.
 
 ## Completion Review
 

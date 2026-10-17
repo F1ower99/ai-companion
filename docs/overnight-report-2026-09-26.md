@@ -1,6 +1,7 @@
 # Autonomous Development Report
 
 报告整理日期：2026-10-16
+后续开发追加：2026-10-17；见文末 Stage 7 状态及独立交接报告。
 开发分支：`codex/stage3-proactive-engine`
 起点：Stage 2 已完成并通过测试，Stage 3 规格已审核通过。
 
@@ -53,7 +54,7 @@ Stage 3 的计划记录了完整回归通过，但没有保留原始测试总数
 - 启动测试使用独立临时 `LOCALAPPDATA`，避免触碰用户真实配置目录或与运行中的实例锁冲突。
 - 一次 auto-review 曾拒绝临时移除 SQLite 单例约束的测试改动；最终保留并验证 schema 不变量，没有削弱实现。
 
-## 当前状态与未解决事项
+## Stage 3–6 结束时的状态（2026-10-16）
 
 - Stage 3–6 已有各自的独立 feature commit；当前分支为 `codex/stage3-proactive-engine`，没有合并到 `main`。
 - 未 push。此前 push 因 `SEC_E_NO_CREDENTIALS` 失败；当前虽配置了 `origin`，仍没有可用 Git 凭据，因此没有重试。
@@ -68,3 +69,11 @@ Stage 3 的计划记录了完整回归通过，但没有保留原始测试总数
 3. 打开提醒设置，确认活动感知默认关闭；若愿意，可启用后体验 `focused`/`idle` 变化，再暂停确认它回到 `unknown`。
 4. 确认未配置 Provider 时本地聊天可保存，且不会因打开聊天或设置而发出网络请求。若之后配置 Provider，先核对发送摘要再发送自己选择的测试消息。
 5. 检查默认隐私边界：应用不会显示或保存你正在使用的程序、窗口标题、键盘内容或屏幕内容。
+
+## 2026-10-17 后续进展
+
+用户随后授权开始 Stage 7。已完成 Stage 7A 的 provider-neutral 本地语音会话基础和独立审查修复（`8cc74fa`、`4f933ea`），真实设备与语音引擎仍未接入，按钮保持禁用。
+
+Stage 7B 已提交 Windows standalone 配置、独立构建 staging、preflight 和依赖许可清单（`9355167`）。当前缺少 MSVC 与部署依赖，尚未执行部署 dry-run/编译或生成 exe，实际打包及人工启动验收仍未完成。
+
+2026-10-18 已完成打包审查修复（`0636c25`），最新全量自动回归 430 项通过。现已存在 `OPEN_QUESTIONS.md`，待选择本地离线 STT/TTS 方案；云端音频不在当前批准范围。没有 push/merge。详细文件、验证、架构决策和推荐体验项见 [Stage 7 交接报告](stage7-report-2026-10-17.md)。

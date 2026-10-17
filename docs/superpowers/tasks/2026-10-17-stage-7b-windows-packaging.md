@@ -15,3 +15,7 @@ Ruling: Qt 6.11.2 lacks --no-install and always cleans its generated directory. 
 Real preflight result: blocked as designed, missing `dumpbin`, `cl`, Nuitka 4.1.1, ordered-set, and zstandard. No packages/compilers installed, no deployment dry-run or real build attempted, no executable produced. This is a tested packaging baseline; Stage 7B's actual build and manual clean-profile acceptance are not complete.
 
 No real user database, Credential Manager, microphone, registry, or network was accessed. Separate Windows user acceptance is required for credentials; LOCALAPPDATA isolation covers only local file data. No push/merge/publication.
+
+Final independent review: one Important finding, no Critical/Minor findings. Malformed SPDX expressions, unknown legacy license placeholders, malformed versions, and mismatched distribution identities were not flagged. Seven fixture cases failed first, then passed after identity/version/SPDX validation and explicit review flags preserving declared license text. Fix commit: `0636c25`. Fifteen tooling tests and the full suite of 430 tests passed on 2026-10-18; compileall, pip check, inventory regeneration comparison and diff checks passed.
+
+Reviewer-set-aside ruling: actual compilation, packaged imports/plugins, clean-profile UX and redistribution compliance remain unverified because the compiler/build packages are absent; these are release gates, not claimed successes. Stage 7A was reviewed independently. Cost: no production-ready Windows package is delivered yet.

@@ -75,7 +75,7 @@ The local STT engine is a product choice with meaningful effects on language sup
 
 - No microphone access until the explicit push-to-talk action and successful permission check.
 - Capture buffers are bounded to 60 seconds and process-memory-only; cleanup drops references and clears mutable buffers on stop, cancel, provider failure, and application close. The implementation does not promise operating-system-level memory zeroization.
-- Voice state, transcript text, microphone/device names, and audio content do not enter SQLite, logs, activity snapshots, provider contexts, or crash diagnostics.
+- Unsent voice-layer transcripts, voice state, microphone/device names, and audio content do not enter SQLite, logs, activity snapshots, provider contexts, or crash diagnostics. Once the user explicitly sends the editable text draft, that text follows the existing chat persistence and disclosure rules.
 - `local_only` is required by the voice application service. A future network provider requires a separate spec, explicit disclosure/consent, and a user-approved change to the no-cloud-audio boundary.
 - Automated tests inject fake ports and never touch a real microphone or speaker.
 
