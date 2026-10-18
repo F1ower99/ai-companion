@@ -26,6 +26,9 @@ deploy = [
 voice = [
     "PySide6-Addons==6.11.2",
 ]
+stt = [
+    "faster-whisper==1.2.1",
+]
 
 [project.scripts]
 ai-companion = "companion.desktop.app:main"

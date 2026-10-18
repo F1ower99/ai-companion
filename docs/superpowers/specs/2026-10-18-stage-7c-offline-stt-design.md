@@ -20,7 +20,7 @@ Select faster-whisper 1.2.1 as an optional `stt` extra, with a local multilingua
 
 - `LocalWhisperSTT(model_directory, language='zh', cpu_threads=4, model_factory=None)` implements existing STTProvider with `local_only=True`; no imports, model loads, hardware, environment mutation, or network calls at construction.
 - On first transcription validate an existing absolute local directory; reject URLs, repository identifiers, UNC/network paths, missing/empty files, and required files resolving outside that directory.
-- Require `model.bin`, `config.json`, `tokenizer.json`, and `vocabulary.json`. Limit their combined size to 1 GiB. These are data files, never Python code, pickle, or remote-code providers. Record publisher/revision/hash in the development smoke record; distributing actual weights requires preserving their applicable license.
+- Require `model.bin`, `config.json`, `tokenizer.json`, and `vocabulary.txt`. Limit their combined size to 1 GiB. These are data files, never Python code, pickle, or remote-code providers. Record publisher/revision/hash in the development smoke record; distributing actual weights requires preserving their applicable license.
 - Pass an absolute directory and `local_files_only=True`, `device='cpu'`, `compute_type='int8'`, one worker and 1–8 CPU threads (default 4). Missing tokenizer must fail before importing/loading the backend: the pinned upstream otherwise falls back to downloading one.
 - Model acquisition is a separate explicit developer action against public publisher assets. Inference never downloads assets, discovers credentials, or sends audio/transcripts. Do not add a downloader to app startup.
 
