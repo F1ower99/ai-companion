@@ -19,6 +19,21 @@ Goals, tasks, basic memories, reminder preferences, reminder state, reason-code 
 
 Stage 7A provides a Qt-free local voice-session foundation: bounded transient PCM, local-only provider ports, explicit transcription/speech operations, cancellation, and interruption. Real speech engines and hardware adapters are not configured, so voice buttons remain disabled and startup does not access a microphone. A validated transcript can enter an empty editable draft; sending still requires the existing explicit Send action. Audio and transient voice state never enter SQLite or provider context. The local speech-stack choice is recorded in `OPEN_QUESTIONS.md`.
 
+## Offline speech recognition
+
+Stage 7C adds optional **local CPU speech recognition** using faster-whisper 1.2.1 and an explicitly supplied complete model directory. Install with `python -m pip install -e ".[dev,stt]"`. The default is Chinese transcription with CPU int8 and four threads. Runtime accepts 16kHz mono PCM16 only, checks cancellation between native operations, and never downloads models. A complete local multilingual Whisper base bundle requires `model.bin`, `config.json`, `tokenizer.json`, and `vocabulary.txt`; repository IDs, URLs, UNC shares and Windows mapped network drives are rejected.
+
+Download the data files separately from the [pinned publisher revision](https://huggingface.co/Systran/faster-whisper-base/tree/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66), preserving model notices. Keep models under ignored `.models/` or another local directory. The model bundle is about 148 MB; installed dependencies and native inference require additional space/RAM. Exact model hashes and real smoke evidence are in [the Stage 7C asset record](docs/offline-stt-assets-2026-10-18.md).
+
+For a deliberately selected public test WAV (not personal recordings), run:
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+python scripts/smoke_local_stt.py --model-dir (Resolve-Path .\.models\whisper-base).Path --wav 'C:\public-fixtures\sample-16k-mono.wav' --language zh
+```
+
+The CLI prints processing time and character count; recognized text requires the explicit `--show-transcript` option. It has no microphone access. A real 11-second public English fixture passed on CPU with Python socket connections blocked (0.76–0.95 seconds in this development run, including model setup; not a general benchmark). Chinese recognition quality has not yet been measured. Microphone capture, recording UI and local TTS remain unconnected, so runtime speech controls stay disabled. Native calls can only be cancelled cooperatively at their boundaries. This slice does not change reminders or chat consent.
+
 ## Windows standalone build baseline
 
 Use a Windows x64 Native Tools prompt with MSVC `cl` and `dumpbin` already on PATH, then activate the project virtual environment. Install build dependencies explicitly:

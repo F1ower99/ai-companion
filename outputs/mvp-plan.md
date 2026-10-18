@@ -160,6 +160,8 @@ Stage 7A 已实现 provider-neutral 本地语音会话基础：PCM/转写校验�
 
 Stage 7B 已建立 standalone 配置、无删除的构建入口、独立构建目录和依赖许可元数据清单。当前环境缺少 MSVC 与构建依赖，preflight 已正确阻止构建；未生成 exe，部署 dry-run 与真实打包/启动验收均未完成。说明见 README；临时 LOCALAPPDATA 不能隔离 Credential Manager，凭据验收需要单独 Windows 测试账号。
 
+Stage 7C 已按用户选择的离线模型方向实现可选 faster-whisper CPU/int8 识别适配器和受限 WAV smoke 工具；Whisper base 的固定发布版本与文件哈希已核验。11 秒公开英文样例在阻断 Python 网络连接后通过真实识别和 CLI 验证，分别约 0.95/0.76 秒；完整回归 470 项通过。中文质量尚未验证（公开中文样例下载因审批服务额度耗尽未执行）；麦克风/Qt worker 和本地朗读仍未接入。真实测试记录见 `docs/offline-stt-assets-2026-10-18.md`。
+
 **文件：**
 
 - 新建 `src/companion/ports/voice.py`、`adapters/voice/push_to_talk.py`、`tts.py`、`stt_provider.py`。
