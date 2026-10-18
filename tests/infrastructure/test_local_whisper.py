@@ -1,4 +1,7 @@
 import struct
+from pathlib import Path
+import ctypes
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -159,6 +162,69 @@ def test_overlap_is_rejected_without_affecting_current_call(model_dir):
         yield SimpleNamespace(text='outer result')
     model.callback = overlapping
     assert stt.transcribe(audio(), CancellationFlag()).text == 'outer result'
+
+
+def test_cancel_during_preprocessing_never_enters_lazy_decoder(model_dir):
+    stt, model, _ = provider(model_dir)
+    token, entered = CancellationFlag(), []
+    def preprocess():
+        token.cancel()
+        def decode():
+            entered.append(True)
+            yield SimpleNamespace(text='late')
+        return decode()
+    model.callback = preprocess
+    with pytest.raises(VoiceOperationError):
+        stt.transcribe(audio(), token)
+    assert entered == []
+
+
+def test_cancellation_is_checked_before_each_lazy_advance(model_dir):
+    stt, model, _ = provider(model_dir)
+    token, advances = CancellationFlag(), []
+    class Segment:
+        @property
+        def text(self):
+            token.cancel()
+            return 'first'
+    def decode():
+        advances.append(1)
+        yield Segment()
+        advances.append(2)
+        yield SimpleNamespace(text='second')
+    model.callback = decode
+    with pytest.raises(VoiceOperationError):
+        stt.transcribe(audio(), token)
+    assert advances == [1]
+
+
+def test_resolved_unc_model_is_rejected_before_remote_inspection(model_dir, monkeypatch):
+    stt, _, calls = provider(model_dir)
+    network = Path(r'\\server\models')
+    resolve, is_dir = Path.resolve, Path.is_dir
+    inspected = []
+    def mapped_resolve(self, **kwargs):
+        return network if self == model_dir else resolve(self, **kwargs)
+    def inspect_directory(self):
+        if self == network:
+            inspected.append(self)
+            return False
+        return is_dir(self)
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, 'resolve', mapped_resolve)
+        patch.setattr(Path, 'is_dir', inspect_directory)
+        with pytest.raises(VoiceOperationError):
+            stt.transcribe(audio(), CancellationFlag())
+    assert inspected == [] and calls == []
+
+
+def test_mapped_remote_drive_is_rejected_before_factory(model_dir, monkeypatch):
+    stt, _, calls = provider(model_dir)
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(ctypes, 'WinDLL', lambda *a, **kw: SimpleNamespace(GetDriveTypeW=lambda root: 4), raising=False)
+    with pytest.raises(VoiceOperationError):
+        stt.transcribe(audio(), CancellationFlag())
+    assert calls == []
 
 
 @pytest.mark.parametrize('kwargs', [{'language': 'auto'}, {'cpu_threads': 0}, {'cpu_threads': True}, {'cpu_threads': 9}])

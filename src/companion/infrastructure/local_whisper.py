@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from threading import Lock
+import sys
 
 from companion.domain.chat import CancellationToken
 from companion.domain.errors import ValidationError
@@ -24,15 +25,34 @@ class LocalWhisperSTT:
     def _validated_directory(self) -> Path:
         raw = str(self._directory)
         path = Path(raw)
-        if '://' in raw or raw.startswith(('\\\\', '//')) or not path.is_absolute():
+        if '://' in raw or not path.is_absolute() or not self._is_local_location(path):
             raise VoiceOperationError(VoiceErrorCode.NOT_CONFIGURED)
         path = path.resolve(strict=True)
+        if not self._is_local_location(path):
+            raise VoiceOperationError(VoiceErrorCode.NOT_CONFIGURED)
         required = [path / name for name in ('model.bin', 'config.json', 'tokenizer.json', 'vocabulary.txt')]
         if not path.is_dir() or any(
             not file.is_file() or file.resolve().parent != path or file.stat().st_size <= 0 for file in required
         ) or sum(file.stat().st_size for file in required) > 1024 ** 3:
             raise VoiceOperationError(VoiceErrorCode.NOT_CONFIGURED)
         return path
+
+    @staticmethod
+    def _is_local_location(path: Path) -> bool:
+        if str(path).startswith(('\\\\', '//')):
+            return False
+        if sys.platform != 'win32':
+            return True
+        try:
+            import ctypes
+            reader = ctypes.WinDLL('kernel32', use_last_error=True).GetDriveTypeW
+            reader.argtypes = [ctypes.c_wchar_p]
+            reader.restype = ctypes.c_uint
+            # Reject remote, unknown, and nonexistent drive roots before
+            # resolving/inspecting model files on a mapped network share.
+            return reader(path.anchor) in (2, 3, 5, 6)
+        except Exception:
+            return False
 
     @staticmethod
     def _check_cancelled(token: CancellationToken) -> None:
@@ -74,9 +94,17 @@ class LocalWhisperSTT:
                 temperature=0.0, condition_on_previous_text=False, vad_filter=False,
                 without_timestamps=True, word_timestamps=False, log_progress=False,
             )
-            texts, length = [], 0
-            for count, segment in enumerate(segments, start=1):
+            self._check_cancelled(cancellation_token)
+            texts, length, count = [], 0, 0
+            iterator = iter(segments)
+            while True:
                 self._check_cancelled(cancellation_token)
+                try:
+                    segment = next(iterator)
+                except StopIteration:
+                    break
+                self._check_cancelled(cancellation_token)
+                count += 1
                 text = segment.text
                 if count > 256 or not isinstance(text, str):
                     raise VoiceOperationError(VoiceErrorCode.TRANSCRIPTION_FAILED)
