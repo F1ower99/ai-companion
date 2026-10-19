@@ -27,12 +27,12 @@
 
 ## Task 1: bounded adapter
 
-- [ ] Add failing tests in `tests/infrastructure/test_qt_microphone.py` for fake-backend transfer/limits/error/cancel/thread behavior. Observe RED.
-- [ ] Implement `src/companion/infrastructure/qt_microphone.py` with lazy backend factory, owner-thread checks, generation lifecycle, bounded PCM and timer, safe errors. Observe GREEN.
+- [x] Add failing tests in `tests/infrastructure/test_qt_microphone.py` for fake-backend transfer/limits/error/cancel/thread behavior. Observe RED.
+- [x] Implement `src/companion/infrastructure/qt_microphone.py` with lazy backend factory, owner-thread checks, generation lifecycle, bounded PCM and timer, safe errors. Observe GREEN.
 
 ## Task 2: actual backend and evidence
 
-- [ ] Add failing fake Qt Multimedia boundary tests in the same test file for permission, device, format, start, reads and stop. Observe RED.
-- [ ] Implement lazy `QtAudioInput` backend; inspect installed optional 6.11.2 binding without device discovery. Observe GREEN.
-- [ ] Run full regression, compileall, pip check and inspect diff/secrets; obtain one independent fresh review; Important/Critical fixes get one RED/GREEN pass, Minors recorded.
-- [ ] Update Stage 7/overnight reports, README and execution ledger with actual limits/tests/remaining integration. Commit stage independently; keep branch, no merge or force push.
+- [x] Add failing fake Qt Multimedia boundary tests in the same test file for permission, device, format, start, reads and stop. Observe RED.
+- [x] Implement lazy `QtAudioInput` backend; inspect local official 6.11.2 type signatures without device discovery. Observe GREEN. Native import/runtime validation deferred: optional download did not finish; ruling in execution record.
+- [x] Run full regression, compileall, pip check and inspect diff/secrets; obtain one independent fresh review; Important/Critical fixes get one RED/GREEN pass, Minors recorded.
+- [x] Update Stage 7/overnight reports, README and execution ledger with actual limits/tests/remaining integration. Commit stage independently; keep branch, no merge or force push.

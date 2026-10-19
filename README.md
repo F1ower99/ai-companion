@@ -32,7 +32,13 @@ $env:PYTHONPATH = (Resolve-Path .\src).Path
 python scripts/smoke_local_stt.py --model-dir (Resolve-Path .\.models\whisper-base).Path --wav 'C:\public-fixtures\sample-16k-mono.wav' --language zh
 ```
 
-The CLI prints processing time and character count; recognized text requires the explicit `--show-transcript` option. It has no microphone access. A real 11-second public English fixture passed on CPU with Python socket connections blocked (0.76–0.95 seconds in this development run, including model setup; not a general benchmark). Chinese recognition quality has not yet been measured. Microphone capture, recording UI and local TTS remain unconnected, so runtime speech controls stay disabled. Native calls can only be cancelled cooperatively at their boundaries. This slice does not change reminders or chat consent.
+The CLI prints processing time and character count; recognized text requires the explicit `--show-transcript` option. It has no microphone access. A real 11-second public English fixture passed on CPU with Python socket connections blocked (0.76–0.95 seconds in this development run, including model setup; not a general benchmark). A 5.616-second public Chinese fixture also ran offline, but produced a substantive recognition error; Chinese usability is not signed off. Native calls can only be cancelled cooperatively at their boundaries. This slice does not change reminders or chat consent.
+
+## Optional microphone capture adapter
+
+Stage 7D adds `QtMicrophoneCapture`, a lazy Qt Multimedia adapter for the existing optional `voice` extra. Lifecycle calls must run on its owning Qt thread. Construction does not query devices. An explicit start requires already-granted microphone permission and supports only a default input with 16kHz mono PCM16. Buffered PCM is capped at 60 seconds; a timer also releases silent/stalled capture, and cancellation clears owned bytes. Audio is never written to disk or sent over the network.
+
+This adapter is **not wired to the chat controls yet**: recording remains disabled in the app. The current synchronous VoiceSession must not invoke this Qt adapter's stop method from a worker; a separate integration slice must release capture on the UI thread and run recognition in a worker. Tests use fake devices; real permission/device compatibility, visible recording controls, TTS and packaged voice still require implementation/acceptance. Missing optional runtime or unsupported devices fail safely.
 
 ## Windows standalone build baseline
 
