@@ -31,3 +31,11 @@ Public fixture: [upstream JFK FLAC](https://github.com/SYSTRAN/faster-whisper/bl
 ## Uncompleted checks
 
 Chinese public fixture download was not executed: automatic approval review failed because its service usage limit was exhausted. The message explicitly described an approval-review failure, not an unsafe-action determination. No bypass was attempted. Chinese pronunciation/recognition quality, real microphone handling, TTS, Qt worker integration and packaged runtime remain untested.
+
+## 2026-10-19 follow-up: Chinese inference
+
+The renewed authorized download succeeded. Public test audio only: [SenseVoiceSmall example/zh.mp3](https://huggingface.co/FunAudioLLM/SenseVoiceSmall/blob/3847d57b6bdf2dd8875cb1508d2af43d80a16bf7/example/zh.mp3), 44,973 bytes. Git blob SHA-1 matched `1ae2c89b29112ee5e23bcebc353ea6687c38e6bd`; SHA-256 is `0e64de19e4ff9a02e682955c9112f32d2317cfdbb5bc2f3504664044c993f195`. Kept in ignored local fixtures; not redistributed. This is a test fixture, not adoption of the SenseVoice model or its license.
+
+With the same local Whisper base assets, language zh, CPU int8, four threads, offline environment flags and blocked Python socket connection methods: 5.616 seconds input, 0.949 seconds processing, 13 characters. Public sample output was `開放時間早上9點 墜下5點`. The publisher's [demo reference](https://github.com/QwenAudio/FunAudioLLM.github.io/blob/master/index.html) for the Chinese opening-hours example reads `开放时间早上9点至下午5点。`. Besides script variation, the observed output contains a substantive recognition error. This verifies execution, **not acceptable Chinese accuracy**; a single sample cannot establish an accuracy rate. Model/decode quality must be evaluated further before voice usability sign-off.
+
+An initial developer probe accidentally instantiated the CancellationToken protocol; rerunning with CancellationFlag corrected the probe. A sandbox model-directory PermissionError required an approved local read for the final run. Neither was a product failure or a change to model/network validation. No microphone, speaker, private audio, conversation database or credentials were accessed. Microphone/TTS/Qt integration and packaged runtime still need their own implementation/acceptance.
