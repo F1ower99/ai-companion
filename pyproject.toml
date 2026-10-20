@@ -29,6 +29,10 @@ voice = [
 stt = [
     "faster-whisper==1.2.1",
 ]
+tts = [
+    "sherpa-onnx==1.13.8",
+    "numpy>=2,<3",
+]
 
 [project.scripts]
 ai-companion = "companion.desktop.app:main"

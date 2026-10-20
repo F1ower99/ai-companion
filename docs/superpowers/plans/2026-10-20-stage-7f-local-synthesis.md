@@ -26,7 +26,7 @@
 
 ## Tasks
 
-- [ ] Task 1 RED: parent adapter/path/protocol/runner tests in `tests/infrastructure/test_local_kokoro.py`; observe failure. Implement `local_kokoro.py`, bounded model validation and `tts_process.py`; add SpeechSynthesizer port. GREEN including fake Popen cancellation/timeout.
-- [ ] Task 2 RED: fake-native waveform/config/input/protocol tests in `tests/infrastructure/test_tts_worker.py`; observe failure. Implement `tts_worker.py`, lazy native imports and safe stdout protocol. GREEN; add optional tts extra, explicitly install and inspect pinned bindings.
-- [ ] Task 3: verify/acquire ignored public model bundle, run public in-memory Chinese synthesis without network/device calls, record actual results and license provenance. Full regression, compileall, pip check; one independent review and Important/Critical RED/GREEN fix pass.
-- [ ] Update README, Stage7/overnight reports and execution record; inspect staged diff/secrets; commit stage independently on existing branch. No merge, force push or release.
+- [x] Task 1 RED: parent adapter/path/protocol/runner tests in `tests/infrastructure/test_local_kokoro.py`; observe failure. Implement `local_kokoro.py`, bounded model validation and `tts_process.py`; add SpeechSynthesizer port. GREEN including fake Popen cancellation/timeout.
+- [x] Task 2 RED: fake-native waveform/config/input/protocol tests in `tests/infrastructure/test_tts_worker.py`; observe failure. Implement `tts_worker.py`, lazy native imports and safe stdout protocol. GREEN; add optional tts extra, explicitly install and inspect pinned bindings.
+- [x] Task 3: verify/acquire ignored public model bundle, run public in-memory Chinese synthesis without network/device calls, record actual results and license provenance. Full regression, compileall, pip check; one independent review and Important/Critical RED/GREEN fix pass.
+- [x] Update README, Stage7/overnight reports and execution record; inspect staged diff/secrets; commit stage independently on existing branch. No merge, force push or release.

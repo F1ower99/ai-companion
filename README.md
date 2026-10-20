@@ -102,3 +102,9 @@ python -m pip check
 ```
 
 The regression suite covers deterministic task decisions, SQLite migrations and reminder/calendar/chat/activity-preference persistence, local-time resolution, the compact Qt reminder UI, course-week rules, calendar exceptions, study-plan summaries, fake activity sensing, and offline provider request/error handling. Full verification commands are listed above. Manual Windows idle behavior, live provider UX, voice, packaging, and semantic memory search remain future work.
+
+## Offline synthesis backend (Stage 7F, developer baseline)
+
+The optional `tts` extra adds pinned sherpa-onnx 1.13.8 and numpy. `LocalKokoroSynthesizer` accepts a verified absolute local Kokoro v1.1-zh bundle and produces owned 24kHz mono PCM16; callers must clear the returned AudioChunk. It does not play sound or enable the Speak button. The source-runtime helper receives text through stdin, suppresses native stderr, and is terminated on cancellation/timeout. No runtime model downloads occur.
+
+Inputs are limited to 200 normalized characters; output to 60 seconds. Model provenance, a fixed public Chinese synthesis smoke and redistribution limitations are recorded in [offline TTS evidence](docs/offline-tts-assets-2026-10-20.md). Models are ignored developer assets. Actual listening quality, device playback and compiled-app helper integration remain unverified.

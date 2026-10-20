@@ -27,3 +27,10 @@ class TTSProvider(Protocol):
 
     def speak(self, text: str, cancellation_token: CancellationToken) -> None: ...
     def stop(self) -> None: ...
+
+
+class SpeechSynthesizer(Protocol):
+    """Local PCM generation only. Caller owns clearing the transferred audio."""
+    local_only: bool
+
+    def synthesize(self, text: str, cancellation_token: CancellationToken) -> AudioChunk: ...

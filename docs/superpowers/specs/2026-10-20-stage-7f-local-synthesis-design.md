@@ -28,7 +28,7 @@ Validate local directory/root confinement before native loading, required nonemp
 
 Worker validates model metadata (24 kHz, 103 speakers), generates no more than 60 seconds of mono PCM16, rejects empty, nonfinite, malformed or oversized samples rather than returning a truncated utterance. Callback limits and final validation enforce application output bounds; native temporary allocation is not certified. Output is magic ACV1 + little-endian sample-rate/byte-length header + exact PCM payload, at most 2,880,000 bytes. Parent checks header/length/format before transferring a mutable AudioChunk. Owned worker arrays/PCM are cleared; OS pipes, native/immutable copies cannot be guaranteed zeroized.
 
-Parent polls process completion/cancellation with bounded communicate timeouts and a 90-second overall infrastructure timeout; cancellation or timeout kills and reaps the worker, returns no partial audio. Timeouts live in the infrastructure runner, not deterministic task scheduling. Cancellation is checked before configuration, launch and publication. Concurrent synthesize fails BUSY without affecting the active request. Injected runner/native loader permit deterministic tests.
+Parent uses bounded pipe-reading/writing threads and polls process completion/cancellation and a 90-second overall infrastructure timeout; cancellation or timeout kills and reaps the worker, returns no partial audio. Timeouts live in the infrastructure runner, not deterministic task scheduling. Cancellation is checked before configuration, launch and publication. Concurrent synthesize fails BUSY without affecting the active request. Injected runner/native loader permit deterministic tests.
 
 ## Acceptance
 
