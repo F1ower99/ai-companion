@@ -36,6 +36,10 @@ These are single-run observations, not general latency or total VRAM requirement
 
 A separate offline, fixed-public-text child loaded the model and started generation. After 0.75 seconds of generation, only that child was terminated and reaped; termination took about 0.0024 seconds in this observation. GPU free-memory snapshots were 6,217 MiB before and 6,261 MiB after; these snapshots include unrelated system variation and are not a general leak proof. No unrelated application was stopped. No audio was played or captured.
 
+## Public-sample recognition sanity check
+
+The same two public synthetic samples were resampled from 24kHz to 16kHz and passed to the existing local Whisper base CPU recognizer with networking blocked. Neutral returned “你好今天辛苦了先休息一下我们慢慢来” (1.80 seconds); gentle returned “也好今天辛苦了先休息一下我们慢慢来” (0.59 seconds). The small Chinese recognizer already has known errors. These observations do not establish pronunciation or naturalness, and do not replace user listening. No microphone, private recording or playback was involved.
+
 ## Remaining gates
 
 Naturalness, pronunciation and user preference have **not** been accepted. No app default, provider composition or scheduling rule changed. Production integration needs its own source/packaged helper protocol, bounded model/session lifetime, cancellation/error handling, runtime selection, latency UX and release review. The stable app still uses its existing optional Kokoro path.
