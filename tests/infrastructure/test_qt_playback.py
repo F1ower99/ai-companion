@@ -1,9 +1,17 @@
 from threading import Thread
 from types import SimpleNamespace
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Signal
 from companion.domain.voice import AudioChunk, VoiceOperationError
 from companion.infrastructure.qt_playback import QtAudioPlayback, QtAudioOutput
+
+
+@pytest.fixture(autouse=True)
+def flush_deferred_output_deletions(qapp):
+    yield
+    # Tests do not run the normal desktop event loop between short operations.
+    # Retire native children before Python collects QObject/callback cycles.
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 class Driver(QObject):
     finished = Signal()
@@ -83,9 +91,16 @@ def test_sync_finish_and_reentrant_new_play_survive(qapp):
         return driver
     player=QtAudioPlayback(backend_factory=factory)
     newer=audio(); player.finished.connect(lambda: player.play(newer))
-    first=audio(); player.play(first)
-    assert not first.pcm and newer.pcm and len(drivers)==2
-    player.stop()
+    first=audio()
+    try:
+        player.play(first)
+        assert not first.pcm and newer.pcm and len(drivers)==2
+    finally:
+        player.finished.disconnect()
+        for driver in drivers:
+            driver.on_start = None
+        player.stop()
+        player.deleteLater()
 
 def test_wrong_thread_never_queries_device(playback):
     player, drivers=playback; errors=[]; result=audio()
@@ -107,6 +122,7 @@ class Sink(QObject):
         super().__init__(parent); self.fmt=fmt; self.resets=0; self.err=0
     def setBufferSize(self,v): pass
     def start(self,source): self.source=source
+    def state(self): return 2
     def error(self): return self.err
     def reset(self): self.resets+=1
 
@@ -167,3 +183,32 @@ def test_destroyed_playback_stops_driver_and_clears_owned_pcm(playback):
     player,drivers=playback; result=audio(); player.play(result)
     shiboken6.delete(player)
     assert drivers[0].stops==1 and not result.pcm
+
+
+class LegacyStateSignal:
+    """Model the native QAudio::State argument conversion failure."""
+    def __init__(self): self.callbacks=[]
+    def connect(self, callback): self.callbacks.append(callback)
+    def disconnect(self, *args): self.callbacks.clear()
+    def emit_unconvertible_state(self):
+        from inspect import signature
+        for callback in list(self.callbacks):
+            if signature(callback).parameters:
+                raise TypeError('QAudio::State cannot be converted')
+            callback()
+
+def test_native_output_handles_legacy_enum_signal_without_converting_argument(qapp):
+    module,calls,sinks=native_module()
+    factory=module.QAudioSink
+    def create(*args):
+        sink=factory(*args); sink.stateChanged=LegacyStateSignal(); return sink
+    module.QAudioSink=create
+    driver=QtAudioOutput(multimedia_loader=lambda:module); completed=[]
+    driver.finished.connect(lambda:completed.append(True))
+    result=audio()
+    try:
+        driver.start(result)
+        sinks[0].stateChanged.emit_unconvertible_state()
+        assert completed==[True]
+    finally:
+        driver.stop(); result.clear()

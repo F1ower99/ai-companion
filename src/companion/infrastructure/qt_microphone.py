@@ -231,7 +231,8 @@ class QtAudioInput(QObject):
         if self._source is not None:
             self.ready.emit()
 
-    def _state_changed(self, state):
+    def _state_changed(self):
+        # No enum payload conversion: capture errors only need the live source.
         if self._source is not None and self._source.error() != self._no_error:
             self.failed.emit()
 

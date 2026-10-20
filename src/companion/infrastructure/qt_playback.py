@@ -135,7 +135,9 @@ class QtAudioOutput(QObject):
                 raise ValueError('Output buffer unavailable.')
             sink = self._sink = multimedia.QAudioSink(device, fmt, self)
             sink.setBufferSize(4800)
-            sink.stateChanged.connect(lambda state: self._state(sink, state))
+            # Qt 6.11's legacy QAudio::State signal payload may fail conversion.
+            # Ignore the payload and read current state after the identity guard.
+            sink.stateChanged.connect(lambda: self._state(sink))
             self._connected = True
             sink.start(buffer)
             if self._sink is sink and sink.error() != self._no_error:
@@ -144,12 +146,12 @@ class QtAudioOutput(QObject):
             self.stop()
             raise VoiceOperationError(VoiceErrorCode.SPEECH_FAILED) from None
 
-    def _state(self, sink, state):
+    def _state(self, sink):
         if self._sink is not sink:
             return
         if sink.error() != self._no_error:
             self.failed.emit()
-        elif state == self._idle:
+        elif sink.state() == self._idle:
             self.finished.emit()
 
     def stop(self):

@@ -107,7 +107,7 @@ The regression suite covers deterministic task decisions, SQLite migrations and 
 
 The optional `tts` extra adds pinned sherpa-onnx 1.13.8 and numpy. `LocalKokoroSynthesizer` accepts a verified absolute local Kokoro v1.1-zh bundle and produces owned 24kHz mono PCM16; callers must clear the returned AudioChunk. That backend alone does not play sound; Stage 7G adds explicit opt-in UI/device playback separately. The source-runtime helper receives text through stdin, suppresses native stderr, and is terminated on cancellation/timeout. No runtime model downloads occur.
 
-Inputs are limited to 200 normalized characters; output to 60 seconds. Model provenance, a fixed public Chinese synthesis smoke and redistribution limitations are recorded in [offline TTS evidence](docs/offline-tts-assets-2026-10-20.md). Models are ignored developer assets. Actual listening quality, device playback and compiled-app helper integration remain unverified.
+Inputs are limited to 200 normalized characters; output to 60 seconds. Model provenance, a fixed public Chinese synthesis smoke and redistribution limitations are recorded in [offline TTS evidence](docs/offline-tts-assets-2026-10-20.md). Models are ignored developer assets. Default-headphone playback, natural completion and explicit stopping were exercised on Windows. The user heard the output but found its prosody/timbre stiff; natural voice quality is not accepted. Compiled-app helper integration remains unverified.
 
 ## Explicit offline reply playback (Stage 7G)
 

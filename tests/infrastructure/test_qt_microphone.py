@@ -394,3 +394,28 @@ def test_native_missing_optional_runtime_is_safe(qapp):
     def missing(): raise ImportError('private installation path')
     backend = QtAudioInput(permission_checker=lambda: True, multimedia_loader=missing)
     assert_error(VoiceErrorCode.NOT_CONFIGURED, backend.start)
+
+
+def test_native_input_error_does_not_require_legacy_state_argument(native):
+    from inspect import signature
+    class LegacySignal:
+        def __init__(self): self.callback=None
+        def connect(self,callback): self.callback=callback
+        def disconnect(self,*args): self.callback=None
+        def emit(self):
+            if signature(self.callback).parameters:
+                raise TypeError('QAudio::State cannot be converted')
+            self.callback()
+    module,device,queries,sources=native
+    factory=module.QAudioSource
+    def create(*args):
+        source=factory(*args); source.stateChanged=LegacySignal(); return source
+    module.QAudioSource=create
+    driver=QtAudioInput(permission_checker=lambda:True,multimedia_loader=lambda:module)
+    failures=[];driver.failed.connect(lambda:failures.append(True))
+    try:
+        driver.start();sources[0].error_code=1
+        sources[0].stateChanged.emit()
+        assert failures==[True]
+    finally:
+        driver.stop()
