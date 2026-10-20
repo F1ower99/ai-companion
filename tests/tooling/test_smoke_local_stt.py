@@ -40,6 +40,18 @@ def test_oversized_or_truncated_wav_header_is_rejected(tmp_path, size, payload):
         module.read_pcm_wav(path)
 
 
+@pytest.mark.parametrize('size', [1, 3, 17])
+def test_partial_pcm_frame_is_not_silently_discarded(tmp_path, size):
+    module = load_script('smoke_local_stt')
+    path = tmp_path / 'partial-frame.wav'
+    path.write_bytes(struct.pack(
+        '<4sI4s4sIHHIIHH4sI', b'RIFF', 36 + size, b'WAVE', b'fmt ',
+        16, 1, 1, 16000, 32000, 2, 16, b'data', size,
+    ) + bytes(size))
+    with pytest.raises(VoiceOperationError):
+        module.read_pcm_wav(path)
+
+
 @pytest.mark.parametrize('fail', [False, True])
 def test_cli_clears_audio_and_never_prints_transcript_or_backend_errors_by_default(tmp_path, capsys, fail):
     module = load_script('smoke_local_stt')

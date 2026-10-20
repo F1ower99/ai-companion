@@ -18,7 +18,9 @@ def read_pcm_wav(path: Path) -> AudioChunk:
             frames = source.getnframes()
             if (source.getframerate(), source.getnchannels(), source.getsampwidth(), source.getcomptype()) != (16000, 1, 2, 'NONE') or not 1 <= frames <= 960000:
                 raise ValueError('Unsupported bounded WAV format.')
-            pcm = bytearray(source.readframes(frames))
+            # wave floors nframes for a partial final sample. Read one extra
+            # frame so a dangling PCM byte is rejected rather than discarded.
+            pcm = bytearray(source.readframes(frames + 1))
             if len(pcm) != frames * 2:
                 pcm.clear()
                 raise ValueError('Truncated WAV.')
