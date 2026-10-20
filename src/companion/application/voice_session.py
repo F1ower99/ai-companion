@@ -3,6 +3,7 @@ from __future__ import annotations
 from threading import RLock
 
 from companion.application.cancellation import CancellationFlag
+from companion.application.voice_transcription import TranscriptionJob
 from companion.domain.errors import ValidationError
 from companion.domain.voice import (
     AudioChunk, VoiceErrorCode, VoiceOperationError, VoiceState, VoiceStatus, VoiceTranscript,
@@ -33,6 +34,7 @@ class VoiceSession:
         self._capture_cleaning = 0
         self._capture_running = False
         self._capture_token: CancellationFlag | None = None
+        self._capture_job: TranscriptionJob | None = None
         self._speech_token: CancellationFlag | None = None
         self._speech_working = False
         self._speech_cleaning = False
@@ -110,6 +112,12 @@ class VoiceSession:
         return self.status
 
     def stop_capture(self) -> VoiceTranscript | None:
+        """Synchronous compatibility path; Qt callers prepare on the UI thread."""
+        job = self.prepare_transcription()
+        return job.run() if job is not None else None
+
+    def prepare_transcription(self) -> TranscriptionJob | None:
+        """Release capture on this thread; return STT-only work for a worker."""
         with self._lock:
             if self._capture_working or not self._capture_running:
                 return None
@@ -117,7 +125,7 @@ class VoiceSession:
             self._capture_working = True
             self._status = VoiceStatus(VoiceState.TRANSCRIBING)
         audio = None
-        phase_error = VoiceErrorCode.CAPTURE_FAILED
+        job = None
         try:
             audio = self._capture.stop()
             with self._lock:
@@ -125,9 +133,38 @@ class VoiceSession:
             if not isinstance(audio, AudioChunk):
                 raise ValidationError('Capture must return bounded PCM.')
             audio.__post_init__()  # Revalidate the transferred mutable buffer.
+            with self._lock:
+                if generation != self._generation or token.is_cancelled():
+                    return None
+                job = TranscriptionJob(
+                    audio,
+                    lambda chunk: self._transcribe(chunk, generation, token),
+                    lambda finished: self._finish_transcription(finished, token),
+                    token,
+                )
+                self._capture_job = job
+                return job
+        except Exception:
+            self._discard_capture(self._capture)
+            with self._lock:
+                if generation == self._generation:
+                    self._status = VoiceStatus(VoiceState.ERROR, VoiceErrorCode.CAPTURE_FAILED)
+            return None
+        finally:
+            if job is None:
+                if isinstance(audio, AudioChunk):
+                    audio.clear()
+                with self._lock:
+                    self._capture_running = False
+                    self._capture_working = False
+                    if self._capture_token is token:
+                        self._capture_token = None
+
+    def _transcribe(self, audio, generation, token) -> VoiceTranscript | None:
+        try:
             if token.is_cancelled():
                 return None
-            phase_error = VoiceErrorCode.TRANSCRIPTION_FAILED
+            audio.__post_init__()
             transcript = self._stt.transcribe(audio, token)
             if not isinstance(transcript, VoiceTranscript):
                 raise ValidationError('STT must return a validated transcript.')
@@ -137,20 +174,20 @@ class VoiceSession:
                 self._status = VoiceStatus(VoiceState.TRANSCRIPT_READY)
                 return transcript
         except Exception:
-            if phase_error is VoiceErrorCode.CAPTURE_FAILED:
-                self._discard_capture(self._capture)
             with self._lock:
                 if generation == self._generation:
-                    self._status = VoiceStatus(VoiceState.ERROR, phase_error)
+                    self._status = VoiceStatus(VoiceState.ERROR, VoiceErrorCode.TRANSCRIPTION_FAILED)
             return None
-        finally:
-            if isinstance(audio, AudioChunk):
-                audio.clear()
-            with self._lock:
-                self._capture_running = False
+
+    def _finish_transcription(self, job, token):
+        with self._lock:
+            if self._capture_job is job:
+                self._capture_job = None
                 self._capture_working = False
-                if generation == self._generation:
+                if self._capture_token is token:
                     self._capture_token = None
+                if token.is_cancelled():
+                    self._status = VoiceStatus(self._rest_state())
 
     def cancel_capture(self) -> VoiceStatus:
         with self._lock:
@@ -160,11 +197,18 @@ class VoiceSession:
             self._generation += 1
             if self._capture_token:
                 self._capture_token.cancel()
+            job = self._capture_job
+            was_running = self._capture_running
             self._capture_running = False
             self._capture_cleaning += 1
             self._status = VoiceStatus(self._rest_state())
         try:
-            self._discard_capture(self._capture)
+            # Ownership has transferred after prepare; a worker must be the
+            # only code clearing its active audio. Qt capture is already closed.
+            if job is None or was_running:
+                self._discard_capture(self._capture)
+            if job is not None:
+                job.cancel()
         finally:
             with self._lock:
                 self._capture_cleaning -= 1

@@ -17,7 +17,7 @@ The desktop shell provides a draggable, always-on-top pet and a chat panel. Righ
 
 Goals, tasks, basic memories, reminder preferences, reminder state, reason-code events, academic terms, course rules, calendar exceptions, conversations, provider settings, and the activity-awareness toggle are stored in SQLite at `%LOCALAPPDATA%\AICompanion\companion.sqlite3` (normally under your Windows user profile). Activity snapshots and timestamps are never persisted. Provider credentials are stored separately in Windows Credential Manager. If the local database cannot be opened, the pet and task/reminder controls remain available safely; chat is disabled when its storage is unavailable. Stage 3 adds a deterministic local decision engine, planned task times, quiet hours, cooldowns, snooze/extension/skip/completion actions, and a small non-modal reminder card. Stage 6 adds an optional, disabled-by-default signal that checks only whether the current Windows session received input within five minutes. It does not read app names or input content; pausing it returns the activity state to `unknown`. Ordinary reminders remain quiet while activity is unknown, except for a feasible, imminent P0 hard deadline. Stage 4 adds local academic-calendar persistence, deterministic course lookup with holiday/rest/makeup overrides, and a read-only study-day summary; it does not add calendar UI or import/sync. Stage 5 adds a local transcript and an optional OpenAI-compatible text provider. No request is made until the user configures an HTTPS provider and local credential, reviews the visible host and outgoing content, and sends a message. Recent conversation, saved memories, and today's plan are independently opt-in; reply language, tone, and principles are included with provider requests. The app does not collect app names, window titles, keystrokes, or screen contents.
 
-Stage 7A provides a Qt-free local voice-session foundation: bounded transient PCM, local-only provider ports, explicit transcription/speech operations, cancellation, and interruption. Real speech engines and hardware adapters are not configured, so voice buttons remain disabled and startup does not access a microphone. A validated transcript can enter an empty editable draft; sending still requires the existing explicit Send action. Audio and transient voice state never enter SQLite or provider context. The local speech-stack choice is recorded in `OPEN_QUESTIONS.md`.
+Stage 7A provides a Qt-free local voice-session foundation: bounded transient PCM, local-only provider ports, explicit transcription/speech operations, cancellation, and interruption. Later slices add optional local recognition/capture and explicit opt-in UI wiring; default startup still does not access a microphone. A validated transcript can enter an empty editable draft; sending still requires the existing explicit Send action. Audio and transient voice state never enter SQLite or provider context. The offline speech direction is recorded in `OPEN_QUESTIONS.md`.
 
 ## Offline speech recognition
 
@@ -38,7 +38,24 @@ The CLI prints processing time and character count; recognized text requires the
 
 Stage 7D adds `QtMicrophoneCapture`, a lazy Qt Multimedia adapter for the existing optional `voice` extra. Lifecycle calls must run on its owning Qt thread. Construction does not query devices. An explicit start requires already-granted microphone permission and supports only a default input with 16kHz mono PCM16. Buffered PCM is capped at 60 seconds; a timer also releases silent/stalled capture, and cancellation clears owned bytes. Audio is never written to disk or sent over the network.
 
-This adapter is **not wired to the chat controls yet**: recording remains disabled in the app. The current synchronous VoiceSession must not invoke this Qt adapter's stop method from a worker; a separate integration slice must release capture on the UI thread and run recognition in a worker. Tests use fake devices; real permission/device compatibility, visible recording controls, TTS and packaged voice still require implementation/acceptance. Missing optional runtime or unsupported devices fail safely.
+Stage 7E connects this adapter to explicit press-to-talk. VoiceSession.prepare_transcription releases capture on the UI thread and transfers a single-use PCM job to a worker; the synchronous stop_capture compatibility API must not be called from a worker when using Qt capture. Pending cancellation clears PCM immediately; already-running native recognition clears it when the worker exits and cannot publish a cancelled result. Tests use fake devices; real permission/device compatibility, recording ergonomics, Chinese recognition quality, TTS and packaged voice still require acceptance. Missing optional runtime or unsupported devices fail safely.
+
+## Explicit offline recording (developer opt-in)
+
+Recording is disabled unless an absolute local model directory is explicitly supplied. Install the optional modules separately, then launch this checkout:
+
+```powershell
+python -m pip install -e ".[dev,voice,stt]"
+$env:PYTHONPATH = (Resolve-Path .\src).Path
+$env:AI_COMPANION_STT_MODEL_DIR = (Resolve-Path .\.models\whisper-base).Path
+python -m companion.desktop.app
+```
+
+Models must already be downloaded and complete as described above. The app never installs modules, downloads weights, requests microphone permission or starts recording on startup. The model path is a launch setting; it is not saved to SQLite. Without the environment setting or optional modules the button explains what is missing. To disable this launch setting, remove `Env:AI_COMPANION_STT_MODEL_DIR` before launching again.
+
+Open chat and **hold** the recording button. Permission is requested following that action. Releasing while a permission prompt is pending cancels this recording; if permission is granted later, hold again to start a new one. While listening, release to stop/release the device and recognize in the background. A separate Cancel voice action discards the operation. Hiding/closing chat cancels it too; reopening never starts recording. A cancelled active decode must exit before another recording, with a visible waiting status. At 60 seconds the adapter releases the device and submits the captured portion once.
+
+The result fills only an empty editable draft. Existing typed text stays intact, and no voice result is sent or persisted until you explicitly press Send under the existing text-provider disclosure. Chinese Whisper base output has a known sample error; inspect/edit the draft. No natural-language task actions or synthesized playback are implemented. The optional Qt 6.11.2 native module has been imported successfully, but actual Windows microphone permission, device-format support and interruptions remain user-led manual acceptance; automated tests never use a microphone.
 
 ## Windows standalone build baseline
 

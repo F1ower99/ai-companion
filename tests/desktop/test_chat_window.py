@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import date, datetime, timezone
 from threading import Event
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, Signal
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QLineEdit
 
@@ -214,6 +214,72 @@ def test_voice_transcript_cannot_overwrite_existing_draft(qtbot):
     assert not window.accept_voice_transcript(VoiceTranscript('新的识别内容'))
     assert window.composer.toPlainText() == '尚未发送的手写内容'
     assert service.messages == []
+
+
+class FakeVoiceController(QObject):
+    stateChanged = Signal(str)
+    transcriptReady = Signal(object)
+    errorOccurred = Signal(object)
+    def __init__(self):
+        super().__init__()
+        self.state = 'idle'
+        self.presses = self.releases = self.cancels = 0
+    @property
+    def can_record(self): return self.state in ('idle', 'error')
+    def press(self):
+        self.presses += 1
+        self.state = 'listening'
+        self.stateChanged.emit(self.state)
+    def release(self):
+        if self.state == 'listening':
+            self.releases += 1
+            self.state = 'transcribing'
+            self.stateChanged.emit(self.state)
+    def cancel(self):
+        self.cancels += 1
+        self.state = 'idle'
+        self.stateChanged.emit(self.state)
+
+
+def test_recording_controls_keep_release_enabled_and_only_fill_draft(qtbot):
+    from companion.domain.voice import VoiceTranscript
+    voice = FakeVoiceController()
+    window, service = make_window(qtbot, voice_controller=voice)
+    assert window.push_to_talk_button.isEnabled()
+    QTest.mousePress(window.push_to_talk_button, Qt.MouseButton.LeftButton)
+    assert voice.presses == 1
+    assert window.push_to_talk_button.isEnabled()
+    assert '录音' in window.voice_status_label.text()
+    assert window.cancel_voice_button.isEnabled()
+    QTest.mouseRelease(window.push_to_talk_button, Qt.MouseButton.LeftButton)
+    assert voice.releases == 1
+    assert not window.push_to_talk_button.isEnabled()
+    voice.state = 'idle'
+    voice.stateChanged.emit('idle')
+    voice.transcriptReady.emit(VoiceTranscript('只作为草稿'))
+    assert window.composer.toPlainText() == '只作为草稿'
+    assert service.send_calls == [] and service.messages == []
+    window.composer.setPlainText('正在手动输入')
+    voice.transcriptReady.emit(VoiceTranscript('迟到的语音'))
+    assert window.composer.toPlainText() == '正在手动输入'
+
+
+def test_hide_chat_cancels_voice_and_reopening_requires_explicit_action(qtbot):
+    voice = FakeVoiceController()
+    window, service = make_window(qtbot, voice_controller=voice)
+    QTest.mousePress(window.push_to_talk_button, Qt.MouseButton.LeftButton)
+    window.hide()
+    assert voice.cancels >= 1
+    assert voice.state == 'idle'
+    window.show()
+    assert voice.presses == 1
+    assert service.send_calls == []
+
+
+def test_unavailable_voice_has_specific_reason(qtbot):
+    window, _ = make_window(qtbot, voice_unavailable_reason='请安装本地 voice/stt 依赖。')
+    assert not window.push_to_talk_button.isEnabled()
+    assert 'voice/stt' in window.push_to_talk_button.toolTip()
 
 
 def test_missing_secret_keeps_draft_and_opens_provider_settings(qtbot):

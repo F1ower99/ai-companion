@@ -27,17 +27,17 @@
 
 ## Task 1: split application operation
 
-- [ ] Add failing tests to `tests/application/test_voice_session.py` for prepare/run, thread identity, single execution, pending/running cancellation, close and failure cleanup; observe RED.
-- [ ] Add `src/companion/application/voice_transcription.py`; modify VoiceSession to expose prepare_transcription and retain synchronous wrapper; observe GREEN with all existing voice tests.
+- [x] Add failing tests to `tests/application/test_voice_session.py` for prepare/run, thread identity, single execution, pending/running cancellation, close and failure cleanup; observe RED.
+- [x] Add `src/companion/application/voice_transcription.py`; modify VoiceSession to expose prepare_transcription and retain synchronous wrapper; observe GREEN with all existing voice tests.
 
 ## Task 2: desktop controller
 
-- [ ] Add `tests/desktop/test_voice_controller.py` failing fake permission/capture/pool and actual QThreadPool tests for the lifecycle/review-focus cases; observe RED.
-- [ ] Implement `src/companion/desktop/voice_controller.py`, including Qt microphone permission requester, safe states/errors, worker dispatch and close/cancel; observe GREEN.
+- [x] Add `tests/desktop/test_voice_controller.py` failing fake permission/capture/pool and actual QThreadPool tests for the lifecycle/review-focus cases; observe RED.
+- [x] Implement `src/companion/desktop/voice_controller.py`, including Qt microphone permission requester, safe states/errors, worker dispatch and close/cancel; observe GREEN.
 
 ## Task 3: opt-in composition and UI
 
-- [ ] Add failing Qt integration/composition/model-preflight tests in `tests/desktop/test_chat_window.py`, new `tests/desktop/test_voice_configuration.py` and existing STT tests; observe RED.
-- [ ] Implement lazy local model preflight in LocalWhisperSTT, environment/module checks in new `desktop/voice_configuration.py`, optional ChatWindow controls and app lifecycle composition. No recording during tests. Observe GREEN.
-- [ ] Full regression, compileall, pip check, staged diff/secret checks. Fresh independent review; one Critical/Important RED/GREEN fix pass, Minors recorded.
-- [ ] Update README, Stage 7/overnight report and execution ledger with actual evidence/limitations. Commit stage, preserve branch; no main merge/force push.
+- [x] Add failing Qt integration/composition/model-preflight tests in `tests/desktop/test_chat_window.py`, new `tests/desktop/test_voice_configuration.py` and existing STT tests; observe RED.
+- [x] Implement lazy local model preflight in LocalWhisperSTT, environment/module checks in new `desktop/voice_configuration.py`, optional ChatWindow controls and app lifecycle composition. No recording during tests. Observe GREEN.
+- [x] Full regression, compileall, pip check, staged diff/secret checks. Fresh independent review; one Critical/Important RED/GREEN fix pass, Minors recorded.
+- [x] Update README, Stage 7/overnight report and execution ledger with actual evidence/limitations. Commit stage, preserve branch; no main merge/force push.

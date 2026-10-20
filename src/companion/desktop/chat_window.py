@@ -23,7 +23,7 @@ from companion.desktop.reminder_settings_dialog import ReminderSettingsDialog
 from companion.domain.chat import ChatRole, ProviderErrorCode
 from companion.domain.decisions import Decision, DecisionKind, ReasonCode
 from companion.domain.models import TaskStatus
-from companion.domain.voice import VoiceTranscript
+from companion.domain.voice import VoiceErrorCode, VoiceTranscript
 
 
 class ChatWindow(QDialog):
@@ -45,9 +45,12 @@ class ChatWindow(QDialog):
         secret_store=None,
         consent_handler=None,
         confirmation_handler=None,
+        voice_controller=None,
+        voice_unavailable_reason=None,
     ) -> None:
         super().__init__()
         self.task_service = task_service
+        self.voice_controller = voice_controller
         self.clock = clock or getattr(task_service, "clock", None)
         self.reminder_service = reminder_service
         self.activity_awareness_service = activity_awareness_service
@@ -147,11 +150,19 @@ class ChatWindow(QDialog):
         self.push_to_talk_button.setObjectName('pushToTalkButton')
         self.push_to_talk_button.setEnabled(False)
         self.push_to_talk_button.setToolTip('尚未配置本地语音识别；麦克风未启用。')
+        if voice_unavailable_reason:
+            self.push_to_talk_button.setToolTip(voice_unavailable_reason)
+        self.cancel_voice_button = QPushButton('取消语音')
+        self.cancel_voice_button.setObjectName('cancelVoiceButton')
+        self.cancel_voice_button.setEnabled(False)
+        self.voice_status_label = QLabel(voice_unavailable_reason or '本地语音未启用。')
+        self.voice_status_label.setWordWrap(True)
         self.speak_reply_button = QPushButton('朗读最新回复')
         self.speak_reply_button.setObjectName('speakReplyButton')
         self.speak_reply_button.setEnabled(False)
         self.speak_reply_button.setToolTip('尚未配置本地语音合成。')
         voice_controls.addWidget(self.push_to_talk_button)
+        voice_controls.addWidget(self.cancel_voice_button)
         voice_controls.addWidget(self.speak_reply_button)
         layout = QVBoxLayout(self)
         layout.addWidget(title)
@@ -163,6 +174,16 @@ class ChatWindow(QDialog):
         layout.addWidget(self.privacy_summary_label)
         layout.addLayout(composer_controls)
         layout.addLayout(voice_controls)
+        layout.addWidget(self.voice_status_label)
+        if voice_controller is not None:
+            self.push_to_talk_button.setToolTip('按住录音，松开后在本机识别；只生成可编辑草稿。')
+            self.push_to_talk_button.pressed.connect(voice_controller.press)
+            self.push_to_talk_button.released.connect(voice_controller.release)
+            self.cancel_voice_button.clicked.connect(voice_controller.cancel)
+            voice_controller.stateChanged.connect(self._refresh_voice_controls)
+            voice_controller.errorOccurred.connect(self._show_voice_error)
+            voice_controller.transcriptReady.connect(self.accept_voice_transcript)
+            self._refresh_voice_controls(voice_controller.state)
 
         self.setStyleSheet(
             """
@@ -179,8 +200,32 @@ class ChatWindow(QDialog):
         self._refresh_privacy_summary()
         self.refresh_transcript()
 
+    def _refresh_voice_controls(self, state):
+        messages = {
+            'idle': '本地语音仅生成草稿；中文识别效果仍待验证。',
+            'permission': '等待麦克风权限；松开按钮将取消本次录音。',
+            'listening': '正在录音…松开后识别，最长 60 秒。',
+            'transcribing': '正在本机识别；可以取消或继续输入文字。',
+            'cancelling': '已取消，等待本地识别退出。',
+            'error': '本地语音暂不可用，请检查配置后重试。',
+            'unavailable': '本地语音未启用。',
+        }
+        self.voice_status_label.setText(messages.get(state, messages['unavailable']))
+        # Keep the held button enabled so Qt can deliver its release event.
+        self.push_to_talk_button.setEnabled(self.voice_controller.can_record or state in ('permission', 'listening'))
+        self.cancel_voice_button.setEnabled(state in ('permission', 'listening', 'transcribing'))
+
+    def _show_voice_error(self, code):
+        messages = {
+            VoiceErrorCode.PERMISSION_DENIED: '没有麦克风权限；本次未录音。',
+            VoiceErrorCode.NOT_CONFIGURED: '本地模型或语音依赖不可用，请检查配置。',
+            VoiceErrorCode.CAPTURE_FAILED: '录音失败或设备不支持所需格式；音频已丢弃。',
+            VoiceErrorCode.TRANSCRIPTION_FAILED: '本地识别失败；音频已清理，可以重试。',
+        }
+        self.voice_status_label.setText(messages.get(code, '本地语音操作未完成。'))
+
     def accept_voice_transcript(self, transcript: VoiceTranscript) -> bool:
-        """Future voice workers hand off a draft; this never sends or stores it."""
+        """Voice workers hand off a draft; this never sends or stores it."""
         if not isinstance(transcript, VoiceTranscript):
             return False
         if self.composer.toPlainText():
@@ -615,3 +660,8 @@ class ChatWindow(QDialog):
             self._active_request_id = None
             self.cancel_button.setEnabled(False)
         super().closeEvent(event)
+
+    def hideEvent(self, event) -> None:
+        if self.voice_controller is not None:
+            self.voice_controller.cancel()
+        super().hideEvent(event)

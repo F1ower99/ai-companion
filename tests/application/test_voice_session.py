@@ -1,5 +1,6 @@
 import pytest
 from threading import Event, Thread
+from threading import get_ident
 
 from companion.application.voice_session import VoiceSession
 from companion.domain.errors import ValidationError
@@ -28,6 +29,105 @@ class Capture:
     def cancel(self):
         self.events.append('cancel')
         self.audio.clear()
+
+
+def test_prepared_transcription_releases_capture_before_worker_and_runs_once():
+    capture, stt = Capture(), STT()
+    session = VoiceSession(capture, stt)
+    owner = get_ident()
+    stop_threads, stt_threads = [], []
+    original_stop = capture.stop
+    def stop():
+        stop_threads.append(get_ident())
+        return original_stop()
+    capture.stop = stop
+    stt.callback = lambda token: (stt_threads.append(get_ident()), VoiceTranscript('草稿'))[1]
+    session.start_push_to_talk()
+    job = session.prepare_transcription()
+    assert stop_threads == [owner] and stt.calls == 0
+    assert session.start_push_to_talk().error_code is VoiceErrorCode.BUSY
+    results = []
+    worker = Thread(target=lambda: results.append(job.run()))
+    worker.start()
+    worker.join(3)
+    assert not worker.is_alive()
+    assert results[0].text == '草稿'
+    assert stt_threads[0] != owner
+    assert capture.events == ['start', 'stop']
+    assert not capture.audio.pcm
+    assert job.run() is None and stt.calls == 1
+
+
+@pytest.mark.parametrize('operation', ['cancel', 'close', 'job'])
+def test_pending_transcription_cancel_clears_immediately_and_queued_run_is_noop(operation):
+    capture, stt = Capture(), STT()
+    session = VoiceSession(capture, stt)
+    session.start_push_to_talk()
+    job = session.prepare_transcription()
+    if operation == 'cancel':
+        session.cancel_capture()
+    elif operation == 'job':
+        job.cancel()
+    else:
+        session.close()
+    assert not capture.audio.pcm
+    assert job.run() is None and stt.calls == 0
+    if operation in ('cancel', 'job'):
+        assert session.status.state is VoiceState.IDLE
+        capture.audio = AudioChunk(bytearray(b'new data'), 8, 1, 1)
+        assert session.start_push_to_talk().state is VoiceState.LISTENING
+        assert job.run() is None
+        assert session.status.state is VoiceState.LISTENING
+        session.cancel_capture()
+
+
+@pytest.mark.parametrize('cancel_via', ['session', 'job'])
+def test_running_job_cancel_preserves_provider_owned_audio_until_worker_exits(cancel_via):
+    capture, stt = Capture(), STT()
+    # A real Qt adapter releases its buffer on stop; cancelling afterward must
+    # not mutate the transferred buffer, unlike the simple old Capture fake.
+    transferred = capture.audio
+    capture.cancel = lambda: capture.events.append('cancel')
+    session = VoiceSession(capture, stt)
+    entered, finish = Event(), Event()
+    def decode(token):
+        entered.set()
+        assert finish.wait(3)
+        assert transferred.pcm == bytearray(b'private!')
+        assert token.is_cancelled()
+        return VoiceTranscript('late result')
+    stt.callback = decode
+    session.start_push_to_talk()
+    job = session.prepare_transcription()
+    results = []
+    worker = Thread(target=lambda: results.append(job.run()))
+    worker.start()
+    try:
+        assert entered.wait(3)
+        if cancel_via == 'session':
+            session.cancel_capture()
+        else:
+            job.cancel()
+        assert transferred.pcm == bytearray(b'private!')
+        assert session.start_push_to_talk().error_code is VoiceErrorCode.BUSY
+    finally:
+        finish.set()
+        worker.join(3)
+    assert results == [None]
+    assert not transferred.pcm
+    assert session.status.state is VoiceState.IDLE
+
+
+def test_job_failure_never_cancels_capture_from_worker():
+    capture, stt = Capture(), STT()
+    session = VoiceSession(capture, stt)
+    stt.callback = lambda token: (_ for _ in ()).throw(RuntimeError('private'))
+    session.start_push_to_talk()
+    job = session.prepare_transcription()
+    assert job.run() is None
+    assert capture.events == ['start', 'stop']
+    assert not capture.audio.pcm
+    assert session.status.error_code is VoiceErrorCode.TRANSCRIPTION_FAILED
 
 
 class STT:

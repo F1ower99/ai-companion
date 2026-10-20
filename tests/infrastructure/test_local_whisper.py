@@ -53,6 +53,8 @@ def test_lazy_cpu_local_only_load_and_pcm_cleanup(model_dir):
     stt, model, calls = provider(model_dir)
     assert calls == [] and stt.local_only is True
     assert stt.transcribe(audio(), CancellationFlag()).text == '你好，世界。'
+
+
     assert calls == [(str(model_dir.resolve()), {
         'device': 'cpu', 'compute_type': 'int8', 'cpu_threads': 4,
         'num_workers': 1, 'local_files_only': True,
@@ -64,6 +66,17 @@ def test_lazy_cpu_local_only_load_and_pcm_cleanup(model_dir):
     assert model.waveform.tolist() == [0, 0, 0, 0]
     stt.transcribe(audio(), CancellationFlag())
     assert len(calls) == 1
+
+
+def test_model_preflight_never_loads_backend_and_missing_files_are_safe(model_dir):
+    stt, _, calls = provider(model_dir)
+    stt.validate_model_directory()
+    assert calls == []
+    (model_dir / 'tokenizer.json').unlink()
+    with pytest.raises(VoiceOperationError) as failure:
+        stt.validate_model_directory()
+    assert failure.value.code == VoiceErrorCode.NOT_CONFIGURED
+    assert calls == []
 
 
 @pytest.mark.parametrize('filename', ['model.bin', 'config.json', 'tokenizer.json', 'vocabulary.txt'])

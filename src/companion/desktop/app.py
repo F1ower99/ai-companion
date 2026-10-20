@@ -20,6 +20,7 @@ from companion.desktop.chat_window import ChatWindow
 from companion.desktop.pet_window import PetWindow
 from companion.desktop.reminder_scheduler import ReminderScheduler
 from companion.desktop.tray import TrayController
+from companion.desktop.voice_configuration import build_voice_controller
 from companion.infrastructure.system_clock import SystemClock
 from companion.infrastructure.openai_compatible import OpenAICompatibleProvider
 from companion.infrastructure.sqlite.chat_repositories import (
@@ -125,6 +126,9 @@ class CompanionApplication(QApplication):
                 self.chat_service = None
                 chat_storage_error = "本地对话存储暂时不可用。"
 
+        self.voice_controller, voice_reason = build_voice_controller(self)
+        if self.voice_controller is not None:
+            self.aboutToQuit.connect(self.voice_controller.close)
         self.chat_window = ChatWindow(
             self.task_service,
             storage_error,
@@ -132,6 +136,8 @@ class CompanionApplication(QApplication):
             reminder_service=self.reminder_service,
             activity_awareness_service=self.activity_awareness_service,
             chat_service=self.chat_service,
+            voice_controller=self.voice_controller,
+            voice_unavailable_reason=voice_reason,
         )
         if chat_storage_error:
             self.chat_window.status_label.setText(

@@ -22,6 +22,10 @@ class ChatWorker(QRunnable):
         self.signals = ChatWorkerSignals()
         _ACTIVE_WORKERS.add(self)
 
+    def abandon(self) -> None:
+        """Release the keepalive after a caller's pool submission fails."""
+        _ACTIVE_WORKERS.discard(self)
+
     @Slot()
     def run(self) -> None:
         try:

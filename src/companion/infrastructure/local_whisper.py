@@ -22,6 +22,13 @@ class LocalWhisperSTT:
         self._model = None
         self._lock = Lock()
 
+    def validate_model_directory(self) -> None:
+        """Metadata-only preflight before requesting permission or capture."""
+        try:
+            self._validated_directory()
+        except (OSError, ValueError, RuntimeError):
+            raise VoiceOperationError(VoiceErrorCode.NOT_CONFIGURED) from None
+
     def _validated_directory(self) -> Path:
         raw = str(self._directory)
         path = Path(raw)
