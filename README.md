@@ -105,6 +105,21 @@ The regression suite covers deterministic task decisions, SQLite migrations and 
 
 ## Offline synthesis backend (Stage 7F, developer baseline)
 
-The optional `tts` extra adds pinned sherpa-onnx 1.13.8 and numpy. `LocalKokoroSynthesizer` accepts a verified absolute local Kokoro v1.1-zh bundle and produces owned 24kHz mono PCM16; callers must clear the returned AudioChunk. It does not play sound or enable the Speak button. The source-runtime helper receives text through stdin, suppresses native stderr, and is terminated on cancellation/timeout. No runtime model downloads occur.
+The optional `tts` extra adds pinned sherpa-onnx 1.13.8 and numpy. `LocalKokoroSynthesizer` accepts a verified absolute local Kokoro v1.1-zh bundle and produces owned 24kHz mono PCM16; callers must clear the returned AudioChunk. That backend alone does not play sound; Stage 7G adds explicit opt-in UI/device playback separately. The source-runtime helper receives text through stdin, suppresses native stderr, and is terminated on cancellation/timeout. No runtime model downloads occur.
 
 Inputs are limited to 200 normalized characters; output to 60 seconds. Model provenance, a fixed public Chinese synthesis smoke and redistribution limitations are recorded in [offline TTS evidence](docs/offline-tts-assets-2026-10-20.md). Models are ignored developer assets. Actual listening quality, device playback and compiled-app helper integration remain unverified.
+
+## Explicit offline reply playback (Stage 7G)
+
+From the source checkout, opt in independently of microphone recognition:
+
+```powershell
+python -m pip install -e ".[voice,tts]"
+$env:PYTHONPATH = (Resolve-Path src).Path
+$env:AI_COMPANION_TTS_MODEL_DIR = (Resolve-Path .models/kokoro-int8-v1_1).Path
+python -m companion.desktop.app
+```
+
+Acquire and verify the trusted local bundle separately using the provenance in [TTS evidence](docs/offline-tts-assets-2026-10-20.md); the app never downloads it. With a saved assistant reply, click “朗读最新回复”. Replies longer than 200 normalized characters explicitly show “朗读前200字”; stored text stays unchanged. There is no autoplay. “取消语音” stops pending synthesis/playback; hiding chat also stops it. PTT stops output before microphone permission/capture; a failed stop blocks recording.
+
+Only exact 24kHz mono PCM16 output devices are supported. Missing/unsupported devices fail safely; no resampling fallback. Physical speaker quality, actual interruption/echo, accessibility and microphone UX need Windows user acceptance. The helper currently requires a Python source runtime; no executable playback compatibility or redistribution release is claimed. Default-off startup does not load models, prompt for permissions or enumerate devices.

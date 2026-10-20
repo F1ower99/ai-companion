@@ -45,3 +45,35 @@ def test_configured_model_is_lazy_and_preflight_is_deferred(monkeypatch, tmp_pat
     assert calls == [('provider', Path(tmp_path)), ('capture', qapp)]
     controller.preflight()
     assert calls[-1] == ('preflight',)
+
+
+def test_tts_default_off_never_probes_optional_runtime():
+    def forbidden(*args): raise AssertionError('default off touched runtime')
+    result,reason=config.build_speech_controller(environ={},module_available=forbidden)
+    assert result is None and 'AI_COMPANION_TTS_MODEL_DIR' in reason
+
+@pytest.mark.parametrize('path',['relative/model','https://example/model',r'\\server\model','C:/comma,model'])
+def test_tts_invalid_path_does_not_probe(path):
+    def forbidden(*args): raise AssertionError('invalid path probed runtime')
+    result,reason=config.build_speech_controller(environ={'AI_COMPANION_TTS_MODEL_DIR':path},module_available=forbidden)
+    assert result is None and reason
+
+def test_tts_missing_runtime_is_safe(tmp_path):
+    result,reason=config.build_speech_controller(environ={'AI_COMPANION_TTS_MODEL_DIR':str(tmp_path)},module_available=lambda name:False)
+    assert result is None and 'tts' in reason
+
+def test_tts_independent_of_stt_and_lazy(monkeypatch,tmp_path,qapp):
+    calls=[]
+    class Synth:
+        def __init__(self,path): calls.append(('provider',path))
+        def validate_model_directory(self): calls.append(('preflight',))
+    class Player:
+        def __init__(self,parent): calls.append(('playback',parent))
+    class Controller:
+        def __init__(self,synth,player,parent,**kwargs): self.preflight=kwargs['preflight']
+    monkeypatch.setattr(config,'LocalKokoroSynthesizer',Synth)
+    monkeypatch.setattr(config,'QtAudioPlayback',Player)
+    monkeypatch.setattr(config,'SpeechController',Controller)
+    result,reason=config.build_speech_controller(qapp,environ={'AI_COMPANION_TTS_MODEL_DIR':str(tmp_path)},module_available=lambda name:True)
+    assert reason is None and calls==[('provider',Path(tmp_path)),('playback',qapp)]
+    result.preflight(); assert calls[-1]==('preflight',)

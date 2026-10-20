@@ -24,6 +24,7 @@ from companion.domain.chat import ChatRole, ProviderErrorCode
 from companion.domain.decisions import Decision, DecisionKind, ReasonCode
 from companion.domain.models import TaskStatus
 from companion.domain.voice import VoiceErrorCode, VoiceTranscript
+from companion.infrastructure.tts_assets import speech_text
 
 
 class ChatWindow(QDialog):
@@ -47,10 +48,15 @@ class ChatWindow(QDialog):
         confirmation_handler=None,
         voice_controller=None,
         voice_unavailable_reason=None,
+        speech_controller=None,
+        speech_unavailable_reason=None,
     ) -> None:
         super().__init__()
         self.task_service = task_service
         self.voice_controller = voice_controller
+        self.speech_controller = speech_controller
+        self._speech_text = None
+        self._speech_reason = speech_unavailable_reason or '尚未配置本地语音合成。'
         self.clock = clock or getattr(task_service, "clock", None)
         self.reminder_service = reminder_service
         self.activity_awareness_service = activity_awareness_service
@@ -160,7 +166,9 @@ class ChatWindow(QDialog):
         self.speak_reply_button = QPushButton('朗读最新回复')
         self.speak_reply_button.setObjectName('speakReplyButton')
         self.speak_reply_button.setEnabled(False)
-        self.speak_reply_button.setToolTip('尚未配置本地语音合成。')
+        self.speak_reply_button.setToolTip(self._speech_reason)
+        self.speech_status_label = QLabel(speech_unavailable_reason or '本地朗读未启用。')
+        self.speech_status_label.setWordWrap(True)
         voice_controls.addWidget(self.push_to_talk_button)
         voice_controls.addWidget(self.cancel_voice_button)
         voice_controls.addWidget(self.speak_reply_button)
@@ -175,11 +183,16 @@ class ChatWindow(QDialog):
         layout.addLayout(composer_controls)
         layout.addLayout(voice_controls)
         layout.addWidget(self.voice_status_label)
+        layout.addWidget(self.speech_status_label)
+        self.cancel_voice_button.clicked.connect(self._cancel_voice)
+        self.speak_reply_button.clicked.connect(self._speak_reply)
+        if speech_controller is not None:
+            speech_controller.stateChanged.connect(self._refresh_speech_controls)
+            speech_controller.errorOccurred.connect(self._show_speech_error)
         if voice_controller is not None:
             self.push_to_talk_button.setToolTip('按住录音，松开后在本机识别；只生成可编辑草稿。')
-            self.push_to_talk_button.pressed.connect(voice_controller.press)
+            self.push_to_talk_button.pressed.connect(self._begin_voice_capture)
             self.push_to_talk_button.released.connect(voice_controller.release)
-            self.cancel_voice_button.clicked.connect(voice_controller.cancel)
             voice_controller.stateChanged.connect(self._refresh_voice_controls)
             voice_controller.errorOccurred.connect(self._show_voice_error)
             voice_controller.transcriptReady.connect(self.accept_voice_transcript)
@@ -213,7 +226,70 @@ class ChatWindow(QDialog):
         self.voice_status_label.setText(messages.get(state, messages['unavailable']))
         # Keep the held button enabled so Qt can deliver its release event.
         self.push_to_talk_button.setEnabled(self.voice_controller.can_record or state in ('permission', 'listening'))
-        self.cancel_voice_button.setEnabled(state in ('permission', 'listening', 'transcribing'))
+        self._refresh_speech_controls()
+
+    def _refresh_speech_controls(self, _state=None):
+        speech = self.speech_controller
+        voice = self.voice_controller
+        voice_active = voice is not None and voice.state in ('permission', 'listening', 'transcribing', 'cancelling')
+        speech_active = speech is not None and speech.state in ('synthesizing', 'playing', 'cancelling', 'error')
+        self.speak_reply_button.setEnabled(bool(speech is not None and speech.can_speak
+                                                and self._speech_text and not voice_active))
+        self.cancel_voice_button.setEnabled(voice_active or speech_active)
+        if speech is not None:
+            messages = {
+                'idle': '本地朗读只在点击后开始；不会自动朗读。',
+                'synthesizing': '正在本机生成语音…可以停止。',
+                'playing': '正在朗读…按住录音会先停止播放。',
+                'cancelling': '已取消，等待本地合成退出。',
+                'error': '朗读失败；请检查模型、输出设备或停止后重试。',
+                'unavailable': '本地朗读未启用。',
+            }
+            self.speech_status_label.setText(messages.get(speech.state, messages['unavailable']))
+
+    def _show_speech_error(self, code):
+        message = ('本地朗读模型或依赖不可用，请检查配置。' if code is VoiceErrorCode.NOT_CONFIGURED
+                   else '本地朗读失败；请检查输出设备或先停止后重试。')
+        self.speech_status_label.setText(message)
+
+    def _begin_voice_capture(self):
+        if self.voice_controller is None or not self.voice_controller.can_record:
+            return
+        if self.speech_controller is not None:
+            if (self.speech_controller.cancel() is not True
+                    or self.speech_controller.state in ('synthesizing', 'playing')):
+                self.speech_status_label.setText('无法确认播放已停止；本次没有开始录音。')
+                return
+        self.voice_controller.press()
+
+    def _cancel_voice(self):
+        if self.speech_controller is not None:
+            self.speech_controller.cancel()
+        if self.voice_controller is not None:
+            self.voice_controller.cancel()
+
+    def _speak_reply(self):
+        if self.speak_reply_button.isEnabled() and self.speech_controller is not None and self._speech_text:
+            self.speech_controller.speak(self._speech_text)
+
+    def _select_speech_reply(self, messages):
+        self._speech_text = None
+        latest = next((message for message in reversed(messages)
+                       if message.role is ChatRole.ASSISTANT
+                       and getattr(message.delivery_state, 'value', '') == 'sent'), None)
+        excerpt = False
+        if latest is not None:
+            normalized = ' '.join(latest.content.split())
+            excerpt = len(normalized) > 200
+            try:
+                self._speech_text = speech_text(normalized[:200])
+            except Exception:
+                pass
+        self.speak_reply_button.setText('朗读前200字' if excerpt else '朗读最新回复')
+        tooltip = ('仅朗读最新回复前 200 个字符，不修改对话。' if excerpt
+                   else '仅在点击后朗读最新成功回复。')
+        self.speak_reply_button.setToolTip(tooltip if self.speech_controller is not None else self._speech_reason)
+        self._refresh_speech_controls()
 
     def _show_voice_error(self, code):
         messages = {
@@ -539,6 +615,7 @@ class ChatWindow(QDialog):
             self.status_label.setText("发送未能完成；草稿仍保留在本机。")
 
     def refresh_transcript(self) -> None:
+        self._select_speech_reply([])
         if self.chat_service is None:
             self.transcript.clear()
             self._last_failed_message_id = None
@@ -552,6 +629,7 @@ class ChatWindow(QDialog):
             self._last_failed_message_id = None
             self.retry_button.setEnabled(False)
             return
+        self._select_speech_reply(messages)
         failed_messages = [
             message for message in messages
             if message.role is ChatRole.USER
@@ -662,6 +740,5 @@ class ChatWindow(QDialog):
         super().closeEvent(event)
 
     def hideEvent(self, event) -> None:
-        if self.voice_controller is not None:
-            self.voice_controller.cancel()
+        self._cancel_voice()
         super().hideEvent(event)

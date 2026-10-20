@@ -1,8 +1,8 @@
-# Stage 7G: explicit offline reply playback (draft)
+# Stage 7G: explicit offline reply playback
 
 ## Goal and boundaries
 
-Continue the approved offline Stage 7 voice roadmap: the user explicitly chooses to read the latest successfully persisted assistant reply, can stop playback, and push-to-talk interrupts playback before recording begins. No automatic speech on reply arrival, background monitoring, model downloads, conversation mutation, or cloud audio. Existing reminders, chat disclosure and manual Send are unchanged. This draft does not claim implementation or human acceptance.
+Continue the approved offline Stage 7 voice roadmap: the user explicitly chooses to read the latest successfully persisted assistant reply, can stop playback, and push-to-talk interrupts playback before recording begins. No automatic speech on reply arrival, background monitoring, model downloads, conversation mutation, or cloud audio. Existing reminders, chat disclosure and manual Send are unchanged. Acceptance evidence is recorded separately in the execution ledger; this design does not imply human device acceptance.
 
 ## Architecture
 
@@ -29,3 +29,5 @@ Expose typed safe errors only. Preserve conversation and composer on synthesis/o
 Use fake synthesizers, clocks where needed, worker pools and audio sinks. Test single-use ownership, cancel before/after synthesis, close before queued delivery, cancelled old completion, reentrant callbacks, pool rejection and safe errors. Test output format/no-device/error cleanup, natural completion, repeated stop and thread affinity. UI tests cover default-off, latest assistant selection, explicit bounded excerpt label, no autoplay, hide cancellation, and PTT stop ordering including stop failure. Run all prior tests, compileall, pip check, staged diff/secret inspection and independent review before marking complete.
 
 Actual Windows listening, interruption and microphone echo behavior require user-led device acceptance; fake tests and valid PCM are insufficient. Deferred: long-reply segmentation, streaming, voice selection UI, automatic companion speech, packaged helper, voice cloning and cloud providers. Self-review: this is one explicit synthesis-to-device path; deterministic scheduling and conversation consent remain independent.
+
+Native output reference: [Qt QAudioSink](https://doc.qt.io/qtforpython-6/PySide6/QtMultimedia/QAudioSink.html). Stop uses reset to discard buffered audio; failures cannot be treated as confirmation of silence.

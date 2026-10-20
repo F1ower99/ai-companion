@@ -20,7 +20,7 @@ from companion.desktop.chat_window import ChatWindow
 from companion.desktop.pet_window import PetWindow
 from companion.desktop.reminder_scheduler import ReminderScheduler
 from companion.desktop.tray import TrayController
-from companion.desktop.voice_configuration import build_voice_controller
+from companion.desktop.voice_configuration import build_voice_controller, build_speech_controller
 from companion.infrastructure.system_clock import SystemClock
 from companion.infrastructure.openai_compatible import OpenAICompatibleProvider
 from companion.infrastructure.sqlite.chat_repositories import (
@@ -129,6 +129,9 @@ class CompanionApplication(QApplication):
         self.voice_controller, voice_reason = build_voice_controller(self)
         if self.voice_controller is not None:
             self.aboutToQuit.connect(self.voice_controller.close)
+        self.speech_controller, speech_reason = build_speech_controller(self)
+        if self.speech_controller is not None:
+            self.aboutToQuit.connect(self.speech_controller.close)
         self.chat_window = ChatWindow(
             self.task_service,
             storage_error,
@@ -138,6 +141,8 @@ class CompanionApplication(QApplication):
             chat_service=self.chat_service,
             voice_controller=self.voice_controller,
             voice_unavailable_reason=voice_reason,
+            speech_controller=self.speech_controller,
+            speech_unavailable_reason=speech_reason,
         )
         if chat_storage_error:
             self.chat_window.status_label.setText(

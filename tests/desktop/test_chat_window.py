@@ -596,3 +596,83 @@ def test_provider_error_statuses_are_distinct_and_do_not_echo_details(qtbot):
     assert len(set(messages)) == len(codes)
     assert all(message for message in messages)
     assert "fixture-secret" not in " ".join(messages)
+
+
+class FakeSpeechController(QObject):
+    stateChanged=Signal(str)
+    errorOccurred=Signal(object)
+    def __init__(self):
+        super().__init__(); self.state='idle'; self.texts=[]; self.cancels=0; self.stop_ok=True
+    @property
+    def can_speak(self): return self.stop_ok and self.state in ('idle','error')
+    def speak(self,text):
+        self.texts.append(text); self.state='synthesizing'; self.stateChanged.emit(self.state)
+    def cancel(self):
+        self.cancels+=1; self.state='idle' if self.stop_ok else 'error'; self.stateChanged.emit(self.state)
+        return self.stop_ok
+
+def add_reply(service,text,role=ChatRole.ASSISTANT,state=DeliveryState.SENT):
+    service.messages.append(ChatMessage(str(len(service.messages)),service.conversation.id,role,text,NOW,state))
+
+def test_speech_reads_only_latest_sent_assistant_on_click(qtbot):
+    speech=FakeSpeechController(); service=FakeChatService()
+    add_reply(service,'old'); add_reply(service,'latest reply')
+    add_reply(service,'user private draft',ChatRole.USER)
+    add_reply(service,'failed user message',role=ChatRole.USER,state=DeliveryState.FAILED)
+    window,_=make_window(qtbot,service,speech_controller=speech)
+    window.composer.setPlainText('unsent draft')
+    assert window.speak_reply_button.isEnabled() and speech.texts==[]
+    QTest.mouseClick(window.speak_reply_button,Qt.MouseButton.LeftButton)
+    assert speech.texts==['latest reply'] and not window.speak_reply_button.isEnabled()
+    assert window.composer.toPlainText()=='unsent draft' and not service.send_calls
+    assert window.cancel_voice_button.isEnabled()
+    QTest.mouseClick(window.cancel_voice_button,Qt.MouseButton.LeftButton)
+    assert speech.cancels==1 and window.speak_reply_button.isEnabled()
+
+def test_long_reply_has_visible_excerpt_label_and_normalized_prefix(qtbot):
+    speech=FakeSpeechController(); service=FakeChatService(); original='中文 '+('好'*205)
+    add_reply(service,original)
+    window,_=make_window(qtbot,service,speech_controller=speech)
+    assert '前200' in window.speak_reply_button.text()
+    QTest.mouseClick(window.speak_reply_button,Qt.MouseButton.LeftButton)
+    assert speech.texts==[' '.join(original.split())[:200]]
+    assert service.messages[0].content==original
+
+def test_missing_speech_content_or_failed_read_disables_playback(qtbot):
+    speech=FakeSpeechController(); service=FakeChatService(); add_reply(service,'你好',ChatRole.USER)
+    window,_=make_window(qtbot,service,speech_controller=speech)
+    assert not window.speak_reply_button.isEnabled()
+    add_reply(service,'...'); window.refresh_transcript()
+    assert not window.speak_reply_button.isEnabled()
+    add_reply(service,'你好'); window.refresh_transcript()
+    assert window.speak_reply_button.isEnabled()
+    service.conversation_messages=lambda _:(_ for _ in ()).throw(RuntimeError('private storage detail'))
+    window.refresh_transcript()
+    assert not window.speak_reply_button.isEnabled()
+
+def test_ptt_stops_speech_first_and_blocks_if_stop_failed(qtbot):
+    voice=FakeVoiceController(); speech=FakeSpeechController()
+    window,_=make_window(qtbot,voice_controller=voice,speech_controller=speech)
+    events=[]
+    old_cancel,old_press=speech.cancel,voice.press
+    speech.cancel=lambda: (events.append('stop'),old_cancel())[1]
+    voice.press=lambda: (events.append('capture'),old_press())[1]
+    QTest.mousePress(window.push_to_talk_button,Qt.MouseButton.LeftButton)
+    assert events==['stop','capture']
+    QTest.mouseRelease(window.push_to_talk_button,Qt.MouseButton.LeftButton)
+    voice.cancel(); speech.stop_ok=False
+    QTest.mousePress(window.push_to_talk_button,Qt.MouseButton.LeftButton)
+    assert events==['stop','capture','stop'] and voice.presses==1
+    QTest.mouseRelease(window.push_to_talk_button,Qt.MouseButton.LeftButton)
+    assert '停止' in window.speech_status_label.text()
+
+def test_recording_disables_speak_and_hide_stops_playback(qtbot):
+    voice=FakeVoiceController(); speech=FakeSpeechController(); service=FakeChatService(); add_reply(service,'你好')
+    window,_=make_window(qtbot,service,voice_controller=voice,speech_controller=speech)
+    QTest.mousePress(window.push_to_talk_button,Qt.MouseButton.LeftButton)
+    assert not window.speak_reply_button.isEnabled()
+    QTest.mouseRelease(window.push_to_talk_button,Qt.MouseButton.LeftButton)
+    assert not window.speak_reply_button.isEnabled()
+    voice.cancel(); assert window.speak_reply_button.isEnabled()
+    window.hide(); assert speech.cancels>=2
+    window.show(); assert not speech.texts
