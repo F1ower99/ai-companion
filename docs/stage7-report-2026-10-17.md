@@ -98,3 +98,7 @@ Stage 7D 最终实现提交：`7ac7b341d102ca3e591cbe5bf0b331ad781e0c4d`。审�
 官方 PyPI 的 PySide6-Addons 6.11.2 安装及原生模块导入成功。独立临时 SQLite profile 的已配置应用启动/退出检查通过，测试中禁止了权限 API、设备发现与模型预检，确认启动未触发它们。独立复审两项 Important 通过四项 RED/GREEN 回归修复；无 Critical 或新 Minor。
 
 尚未完成：真实 Windows 麦克风/权限/设备中断体验、中文质量改善、本地 TTS、编译打包。先完成录音的人机体验验证再扩展朗读；本次没有擅自采集私人音频。原 Stage 7C WAV 工具奇数尾字节 Minor 仍留在记录中。完整最终测试数和提交见下方后续记录及 Stage 7E execution record。
+
+Stage 7E 最终提交：`b3b6ef053019d90effd3e853fd2822f3944c85af`。审查修复后 **532 项测试通过**（本阶段新增 37 项），compileall / pip check / staged diff check 通过。当前分支 `codex/stage3-proactive-engine`，未 push、未 merge；没有剩余的本阶段 Important/Critical 问题。
+
+建议接下来人工体验 5 项：1）不设置语音环境变量启动时入口禁用、无权限提示；2）按 README 显式配置模型后，短按/松开与权限允许/拒绝/晚到都符合说明；3）短句识别只进入草稿，编辑后才手动发送；4）识别中继续输入、取消或隐藏窗口不会被迟到结果覆盖；5）原有任务提醒与“延长后重新评估”仍正常。请先评价录音操作和中文效果，再扩展 TTS；当前不宣称真实设备或中文质量已通过验收。
