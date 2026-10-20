@@ -1,9 +1,13 @@
 from datetime import date, datetime, time, timedelta, timezone
 
+import pytest
+
 from companion.application.proactive_reminder_service import ProactiveReminderService
 from companion.application.task_service import TaskService
 from companion.domain.decisions import DecisionKind, ReasonCode
 from companion.domain.models import Goal, Priority, Task
+from companion.domain.errors import ValidationError
+from companion.application.reminder_reply import parse_reminder_reply
 from companion.domain.reminders import ActivitySnapshot, ActivityState, ReminderAction
 from companion.infrastructure.sqlite.database import SQLiteDatabase
 from companion.infrastructure.sqlite.repositories import (
@@ -74,7 +78,8 @@ def make_task(task_id, title, priority, planned_at, planned_minutes, *, hard_end
     )
 
 
-def test_evening_focus_scenario_and_extension_re_evaluation_survive_restart(tmp_path):
+@pytest.mark.parametrize('reply', [None, '再给我半小时'])
+def test_evening_focus_scenario_and_extension_re_evaluation_survive_restart(tmp_path, reply):
     database = SQLiteDatabase(tmp_path / "companion.sqlite3")
     database.initialize()
     goals = SQLiteGoalRepository(database)
@@ -124,11 +129,17 @@ def test_evening_focus_scenario_and_extension_re_evaluation_survive_restart(tmp_
     assert duplicate_tick.kind is DecisionKind.WAIT
     assert ReasonCode.TASK_COOLDOWN in duplicate_tick.reason_codes
 
+    proposal = parse_reminder_reply(reply) if reply is not None else None
     extension = restarted.respond(
-        "vocabulary", ReminderAction.EXTEND, minutes=30, idempotency_key="acceptance-extension"
+        "vocabulary", proposal.action if proposal else ReminderAction.EXTEND,
+        minutes=proposal.minutes if proposal else 30, idempotency_key="acceptance-extension"
     )
     assert extension.kind is DecisionKind.WAIT
     assert tasks.get("vocabulary").hard_end == vocabulary.hard_end
+    if proposal is not None:
+        with pytest.raises(ValidationError):
+            new_service().respond('vocabulary', proposal.action, minutes=proposal.minutes,
+                                  idempotency_key='repeated-parsed-extension')
     tasks.set_completed_units("vocabulary", 1)
     activity.state = ActivityState.IDLE
     clock.advance(30)

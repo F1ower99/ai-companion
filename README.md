@@ -104,6 +104,14 @@ python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6
 
 `--extra` and `--requirement` are mutually exclusive; development/build extras are excluded unless explicitly selected. Qwen voice experiments use a separate environment and are not part of this app inventory.
 
+## Reply to a reminder locally (Stage 7J)
+
+Automatic reminder cards still do not take keyboard focus. Click “回复提醒…” to open a small input panel for that specific task. Supported examples include “现在做”, “稍后”, “再给我半小时”, “延长30分钟”, “今天跳过” and “已完成”. Arabic/fullwidth and canonical Chinese minute numbers from 1–120 are supported, with explicit half/one/one-and-half/two-hour forms.
+
+Enter or “预览” only displays the proposed action. “确认操作” applies it through the existing reminder service; deadlines, quiet hours, cooldown and the one-extension-per-day rule can still reject it. Editing the reply invalidates the preview. Cancelling only closes the input panel; dismissing/replacing the reminder or choosing an existing quick action discards any pending text proposal. Text and undo history clear on hide.
+
+This is a strict local command grammar, not general conversation understanding. Questions, negations, mixed commands, time-of-day requests and ambiguous custom snooze durations such as “稍后20分钟” are rejected. Use “延长20分钟” for a one-time extension request. Raw reply text is not sent to a provider, stored in conversation/memory or persisted in reminder events. General chat and microphone behavior are unchanged.
+
 ## Inspect and delete saved memories (Stage 7I)
 
 Open “模型与隐私设置” → “管理本地记忆” to inspect existing local memories. Search by literal content, filter the five memory categories, and browse 50 records per page. Expired records are visible by default in this management panel; normal chat retrieval still excludes them. Opening the panel does not save provider form edits or access credentials/network services.

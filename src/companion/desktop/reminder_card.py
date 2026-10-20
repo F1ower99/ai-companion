@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
 from companion.domain.decisions import Decision, DecisionKind, ReasonCode
 from companion.domain.errors import StorageError, ValidationError
 from companion.domain.reminders import ReminderAction, ReminderDisplayMode, remaining_minutes
+from companion.application.reminder_reply import ParsedReminderReply
+from companion.desktop.reminder_reply_dialog import ReminderReplyDialog
 
 
 _REASON_TEXT = {
@@ -53,6 +55,7 @@ class ReminderCard(QDialog):
         self.decision = decision
         self._close_without_action = False
         self._busy = False
+        self.reply_dialog = None
         self.setObjectName("reminderCard")
         self.setWindowTitle("Companion 提醒")
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
@@ -101,6 +104,7 @@ class ReminderCard(QDialog):
         self.extend_button = self._button("延长 X 分钟", "reminderExtendButton")
         self.skip_button = self._button("今天跳过", "reminderSkipButton")
         self.done_button = self._button("已完成", "reminderDoneButton")
+        self.reply_button = self._button('回复提醒…', 'reminderReplyButton')
 
         row_one = QHBoxLayout()
         row_one.addWidget(self.now_button)
@@ -111,6 +115,7 @@ class ReminderCard(QDialog):
         row_three = QHBoxLayout()
         row_three.addWidget(self.skip_button)
         row_three.addWidget(self.done_button)
+        row_three.addWidget(self.reply_button)
         layout = QVBoxLayout(self)
         layout.addWidget(self.title_label)
         layout.addWidget(self.priority_label)
@@ -127,15 +132,18 @@ class ReminderCard(QDialog):
         )
         self.skip_button.clicked.connect(lambda: self._submit(ReminderAction.SKIP_TODAY))
         self.done_button.clicked.connect(lambda: self._submit(ReminderAction.DONE))
+        self.reply_button.clicked.connect(self.open_reply)
         if decision.display_mode is ReminderDisplayMode.SILENT_NON_MODAL:
             self.setProperty("silentNonModal", True)
         self.setStyleSheet(
             "QDialog#reminderCard { background: #f7f5f1; color: #253c3b; border: 1px solid #b9c8c0; border-radius: 12px; }"
-            "QLabel#reminderTitle { font-size: 16px; font-weight: 650; }"
+            "QLabel#reminderTitle { color: #253c3b; font-size: 16px; font-weight: 650; }"
             "QLabel#reminderMetadata, QLabel#reminderDetails { color: #607270; font-size: 12px; }"
             "QLabel#reminderReason { color: #354b49; }"
             "QLabel#reminderError { color: #a14343; }"
-            "QPushButton { padding: 7px 8px; border: 0; border-radius: 7px; background: #dfe9e3; }"
+            "QPushButton { color: #253c3b; padding: 7px 8px; border: 0; border-radius: 7px; background: #dfe9e3; }"
+            "QPushButton:disabled { color: #607270; background: #e5e5e1; }"
+            "QSpinBox { color: #253c3b; background: #ffffff; }"
         )
 
     @staticmethod
@@ -145,9 +153,28 @@ class ReminderCard(QDialog):
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         return button
 
-    def _submit(self, action: ReminderAction, minutes: int | None = None) -> None:
-        if self._busy:
+    def open_reply(self):
+        if self._busy or self._close_without_action or not self.isVisible():
             return
+        if self.reply_dialog is None:
+            self.reply_dialog = ReminderReplyDialog(self.task.title, self._apply_reply, self)
+        if self.reply_dialog.isVisible():
+            self.reply_dialog.raise_()
+            self.reply_dialog.activateWindow()
+        else:
+            self.reply_dialog.begin()
+
+    def _apply_reply(self, proposal):
+        if (not isinstance(proposal, ParsedReminderReply) or self._busy
+                or self._close_without_action or not self.isVisible()):
+            return '这条提醒已失效，请使用当前提醒。'
+        if self._submit(proposal.action, proposal.minutes):
+            return None
+        return self.error_label.text() or '这条提醒暂时不可用。'
+
+    def _submit(self, action: ReminderAction, minutes: int | None = None) -> bool:
+        if self._busy:
+            return False
         self._busy = True
         self._set_buttons_enabled(False)
         self.error_label.clear()
@@ -165,26 +192,27 @@ class ReminderCard(QDialog):
             self._set_buttons_enabled(True)
             self._busy = False
             self.actionFailed.emit("validation")
-            return
+            return False
         except StorageError:
             self.error_label.setText("本地数据暂时不可用，提醒仍保留。")
             self._set_buttons_enabled(True)
             self._busy = False
             self.actionFailed.emit("storage")
-            return
+            return False
         except Exception:
             self.error_label.setText("操作未能完成，提醒仍保留。")
             self._set_buttons_enabled(True)
             self._busy = False
             self.actionFailed.emit("operation")
-            return
+            return False
         self._close_without_action = True
         self.decisionReady.emit(result)
         self.close()
+        return True
 
     def _set_buttons_enabled(self, enabled: bool) -> None:
         for button in (self.now_button, self.later_button, self.extend_button,
-                       self.skip_button, self.done_button):
+                       self.skip_button, self.done_button, self.reply_button):
             button.setEnabled(enabled)
         self.extend_minutes.setEnabled(enabled)
 
@@ -199,8 +227,15 @@ class ReminderCard(QDialog):
             self.move(area.right() - self.width() - 24, area.bottom() - self.height() - 24)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self.reply_dialog is not None:
+            self.reply_dialog.invalidate()
         if self._close_without_action:
             event.accept()
             return
         event.ignore()
         self._submit(ReminderAction.CLOSE)
+
+    def hideEvent(self, event):
+        if self.reply_dialog is not None:
+            self.reply_dialog.invalidate()
+        super().hideEvent(event)
