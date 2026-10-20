@@ -19,3 +19,5 @@ Final independent review: one Important, no other Critical/Important/Minor findi
 One restricted-shell pytest invocation ended in a Windows access violation during collection, before running the new test. Rerunning the focused reproduction and final full suite in the normal approved test environment completed normally; do not conflate that harness crash with the reproduced lifecycle failures. No test privacy boundary was relaxed.
 
 Final limits: no real speaker/microphone/listening/echo acceptance, no native or OS memory zeroization claim, no compiled helper integration. Models/runtime already installed from Stage7F; this stage adds no dependency. Physical voice UX is the next user-experience gate; further voice/personality/animation expansion should follow that evidence rather than adding features blindly.
+
+Stage 7G 实现提交 `6f4434fd7f8c70303a010d409ce7951f8f069264` 已正常推送到开发分支并快进合并 GitHub main。当前开发分支 `codex/stage7g-explicit-playback`；保留所有历史，无 force push、无 PR（连接器权限不足）、无工作区删除。最终 635 项自动测试通过；未进行实际硬件验收。
