@@ -29,6 +29,38 @@ TODAY = date(2026, 10, 11)
 CONFIG = ProviderConfiguration("https://provider.example/v1", "test-model", 30)
 
 
+def test_deleted_local_memory_stays_deleted_and_is_absent_from_future_provider_context(tmp_path):
+    from companion.application.memory_management import MemoryManagementService
+    from companion.infrastructure.sqlite.database import SQLiteDatabase
+    from companion.infrastructure.sqlite.repositories import SQLiteMemoryRepository
+    database = SQLiteDatabase(tmp_path / 'memory-management.sqlite3')
+    database.initialize()
+    repository = SQLiteMemoryRepository(database)
+    for memory in (
+        Memory('keep', MemoryKind.PROFILE, 'memory-survives', created_at=NOW),
+        Memory('remove', MemoryKind.PROFILE, 'memory-remove', created_at=NOW, importance=5),
+        Memory('expired', MemoryKind.PROFILE, 'memory-expired', created_at=NOW, expires_at=NOW),
+    ):
+        repository.add(memory)
+    settings = ChatSettings(provider=CONFIG, context_preferences=ChatContextPreferences(saved_memories=True))
+    service, _, _, _, _, provider, clock, _, conversation = build_service(settings=settings)
+    service.memories = repository
+    management = MemoryManagementService(repository, clock)
+    assert len(management.list_page().records) == 3
+    service.grant_current_consent()
+    service.send(conversation.id, 'memory')
+    before = '\n'.join(message.content for message in provider.calls[-1].request.messages)
+    assert 'memory-remove' in before and 'memory-expired' not in before
+    assert management.delete('remove') is True
+    reopened = SQLiteDatabase(database.path)
+    reopened.initialize()
+    service.memories = SQLiteMemoryRepository(reopened)
+    assert {memory.id for memory in service.memories.search(MemoryQuery(include_expired=True))} == {'keep', 'expired'}
+    service.send(conversation.id, 'memory')
+    after = '\n'.join(message.content for message in provider.calls[-1].request.messages)
+    assert 'memory-survives' in after and 'memory-remove' not in after and 'memory-expired' not in after
+
+
 class FakeClock:
     def __init__(self, current=NOW, local_day=TODAY):
         self.current = current

@@ -54,6 +54,32 @@ raise SystemExit(app.exec())
     assert result.returncode == 0, result.stderr
 
 
+def test_application_wires_memory_panel_to_isolated_local_store():
+    result = run_shell_script('''
+from PySide6.QtCore import QTimer
+from companion.infrastructure.windows_credentials import WindowsCredentialStore
+def forbidden(*args):
+    raise AssertionError('Unexpected credential access')
+WindowsCredentialStore.get = forbidden
+WindowsCredentialStore.set = forbidden
+WindowsCredentialStore.delete = forbidden
+from companion.desktop.app import create_application
+app = create_application(['memory-panel-isolated-test'])
+assert app.chat_window.memory_service is app.memory_service
+app.chat_window.show()
+app.chat_window.open_provider_settings()
+settings = app.chat_window.provider_settings_dialog
+settings.memory_button.click()
+assert settings.memory_dialog.isVisible()
+assert settings.memory_dialog.list_widget.count() == 0
+app.chat_window.hide()
+assert not settings.isVisible() and not settings.memory_dialog.isVisible()
+QTimer.singleShot(0, app.quit)
+raise SystemExit(app.exec())
+''')
+    assert result.returncode == 0, result.stderr
+
+
 def test_app_event_loop_exits_when_pet_closes_without_system_tray():
     code = """
 from PySide6.QtCore import QTimer

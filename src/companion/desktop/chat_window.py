@@ -50,6 +50,7 @@ class ChatWindow(QDialog):
         voice_unavailable_reason=None,
         speech_controller=None,
         speech_unavailable_reason=None,
+        memory_service=None,
     ) -> None:
         super().__init__()
         self.task_service = task_service
@@ -61,6 +62,7 @@ class ChatWindow(QDialog):
         self.reminder_service = reminder_service
         self.activity_awareness_service = activity_awareness_service
         self.chat_service = chat_service
+        self.memory_service = memory_service
         self.settings_repository = settings_repository or getattr(chat_service, "settings", None)
         self.secret_store = secret_store or getattr(chat_service, "secrets", None)
         self.consent_handler = consent_handler or self._ask_for_consent
@@ -348,7 +350,8 @@ class ChatWindow(QDialog):
             return
         if self.provider_settings_dialog is None:
             self.provider_settings_dialog = ProviderSettingsDialog(
-                self.settings_repository, self.secret_store, self.clock, self
+                self.settings_repository, self.secret_store, self.clock, self,
+                memory_service=self.memory_service,
             )
             self.provider_settings_dialog.saved.connect(self._on_provider_settings_saved)
         else:
@@ -741,4 +744,6 @@ class ChatWindow(QDialog):
 
     def hideEvent(self, event) -> None:
         self._cancel_voice()
+        if self.provider_settings_dialog is not None:
+            self.provider_settings_dialog.hide()
         super().hideEvent(event)

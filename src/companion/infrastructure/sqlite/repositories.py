@@ -242,11 +242,14 @@ class SQLiteMemoryRepository:
         limit: int = 5,
         *,
         as_of_utc: datetime | None = None,
+        offset: int = 0,
     ) -> list[Memory]:
         if not isinstance(query, MemoryQuery):
             raise ValidationError("A memory query is required.")
         if type(limit) is not int or limit <= 0:
             raise ValidationError("Memory search limit must be a positive integer.")
+        if type(offset) is not int or offset < 0:
+            raise ValidationError('Memory search offset must be a nonnegative integer.')
         if as_of_utc is not None:
             if as_of_utc.tzinfo is None or as_of_utc.utcoffset() is None:
                 raise ValidationError("as_of_utc must include a timezone.")
@@ -269,11 +272,11 @@ class SQLiteMemoryRepository:
                 (as_of_utc or datetime.now(timezone.utc)).isoformat()
             )
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        parameters.append(limit)
+        parameters.extend((limit, offset))
         with self.database.connection() as connection:
             rows = connection.execute(
                 "SELECT * FROM memories" + where +
-                " ORDER BY importance DESC, created_at DESC, id LIMIT ?",
+                " ORDER BY importance DESC, created_at DESC, id LIMIT ? OFFSET ?",
                 parameters,
             ).fetchall()
             return [_memory_from_row(row) for row in rows]

@@ -26,16 +26,19 @@ from companion.domain.chat import (
 )
 from companion.domain.errors import StorageError, ValidationError
 from companion.infrastructure.windows_credentials import CredentialStoreError
+from companion.desktop.memory_dialog import MemoryDialog
 
 
 class ProviderSettingsDialog(QDialog):
     saved = Signal(object)
 
-    def __init__(self, settings_repository, secret_store, clock, parent=None) -> None:
+    def __init__(self, settings_repository, secret_store, clock, parent=None, *, memory_service=None) -> None:
         super().__init__(parent)
         self.settings_repository = settings_repository
         self.secret_store = secret_store
         self.clock = clock
+        self.memory_service = memory_service
+        self.memory_dialog = None
         self.setWindowTitle("Companion 提供方设置")
         self.setMinimumWidth(360)
 
@@ -51,6 +54,9 @@ class ProviderSettingsDialog(QDialog):
 
         self.recent_history_checkbox = QCheckBox("最多 12 条近期对话")
         self.saved_memories_checkbox = QCheckBox("最多 5 条相关保存记忆")
+        self.memory_button = QPushButton('管理本地记忆')
+        self.memory_button.setEnabled(memory_service is not None)
+        self.memory_button.clicked.connect(self.open_memories)
         self.today_plan_checkbox = QCheckBox("最多 12 项任务与 8 门课程摘要")
 
         self.language_input = QLineEdit()
@@ -103,8 +109,23 @@ class ProviderSettingsDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.recent_history_checkbox)
         layout.addWidget(self.saved_memories_checkbox)
+        layout.addWidget(self.memory_button)
         layout.addWidget(self.today_plan_checkbox)
         return widget
+
+    def open_memories(self):
+        if self.memory_service is None:
+            return
+        if self.memory_dialog is None:
+            self.memory_dialog = MemoryDialog(self.memory_service, self)
+        self.memory_dialog.show()
+        self.memory_dialog.raise_()
+        self.memory_dialog.activateWindow()
+
+    def hideEvent(self, event):
+        if self.memory_dialog is not None:
+            self.memory_dialog.hide()
+        super().hideEvent(event)
 
     def _load_settings(self) -> None:
         try:

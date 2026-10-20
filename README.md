@@ -104,6 +104,12 @@ python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6
 
 `--extra` and `--requirement` are mutually exclusive; development/build extras are excluded unless explicitly selected. Qwen voice experiments use a separate environment and are not part of this app inventory.
 
+## Inspect and delete saved memories (Stage 7I)
+
+Open “模型与隐私设置” → “管理本地记忆” to inspect existing local memories. Search by literal content, filter the five memory categories, and browse 50 records per page. Expired records are visible by default in this management panel; normal chat retrieval still excludes them. Opening the panel does not save provider form edits or access credentials/network services.
+
+Select a record to inspect its content, source, importance and expiration. “删除选中记忆” asks for confirmation with No as the default, then deletes only that record. Hiding or refreshing the panel invalidates a pending confirmation; closing the panel clears its displayed records. Deletion affects subsequent memory retrieval. Requests already started and conversation messages containing similar text remain separate; use “清空对话” for the transcript. No automatic memory extraction, editing, bulk delete or physical secure-erasure guarantee is added.
+
 ## Optional login startup (Stage 7H)
 
 The tray menu includes “开机启动（当前用户）”. It creates no startup entry by default and reads only this app's Run value when the menu opens. Only an explicit checkbox action enables or disables it. Disabling removes this application's `AICompanion` value from current-user Run; other entries remain untouched. No administrator access, service or scheduled task is used.

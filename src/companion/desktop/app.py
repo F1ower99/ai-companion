@@ -15,6 +15,7 @@ from companion.application.chat_service import ChatService
 from companion.application.activity_awareness_service import ActivityAwarenessService
 from companion.application.proactive_reminder_service import ProactiveReminderService
 from companion.application.task_service import TaskService
+from companion.application.memory_management import MemoryManagementService
 from companion.domain.errors import StorageError
 from companion.desktop.chat_window import ChatWindow
 from companion.desktop.pet_window import PetWindow
@@ -97,12 +98,14 @@ class CompanionApplication(QApplication):
             return
 
         self.chat_service: ChatService | None = None
+        self.memory_service: MemoryManagementService | None = None
         self.activity_awareness_service: ActivityAwarenessService | None = None
         chat_storage_error = None
         try:
             database = factory(database_path)
             database.initialize()
             self.task_service: TaskService | None = build_task_service(database, self.clock)
+            self.memory_service = MemoryManagementService(SQLiteMemoryRepository(database), self.clock)
             self.activity_awareness_service = ActivityAwarenessService(
                 WindowsIdleActivitySource(),
                 SQLiteActivityPreferencesRepository(database),
@@ -116,6 +119,7 @@ class CompanionApplication(QApplication):
             )
             storage_error = None
         except StorageError:
+            self.memory_service = None
             self.task_service = None
             self.reminder_service = None
             storage_error = "本地数据暂时不可用，任务功能已停用。"
@@ -144,6 +148,7 @@ class CompanionApplication(QApplication):
             voice_unavailable_reason=voice_reason,
             speech_controller=self.speech_controller,
             speech_unavailable_reason=speech_reason,
+            memory_service=self.memory_service,
         )
         if chat_storage_error:
             self.chat_window.status_label.setText(

@@ -72,6 +72,23 @@ def make_memory(
     )
 
 
+def test_memory_offset_pages_preserve_stable_order_and_default_query(repositories):
+    memories = repositories[2]
+    for index in range(6):
+        memories.add(make_memory(f'memory-{index}', 'same literal text'))
+    query = MemoryQuery(include_expired=True)
+    assert [m.id for m in memories.search(query, limit=2)] == ['memory-0', 'memory-1']
+    assert [m.id for m in memories.search(query, limit=2, offset=2)] == ['memory-2', 'memory-3']
+    assert [m.id for m in memories.search(query, limit=2, offset=4)] == ['memory-4', 'memory-5']
+    assert memories.search(query, limit=2, offset=6) == []
+
+
+@pytest.mark.parametrize('offset', [-1, True, '0', 0.5])
+def test_memory_offset_must_be_nonnegative_integer(repositories, offset):
+    with pytest.raises(ValidationError):
+        repositories[2].search(MemoryQuery(), offset=offset)
+
+
 def test_goal_task_and_memory_round_trip_after_reopening_database(tmp_path):
     database = SQLiteDatabase(tmp_path / "companion.sqlite3")
     database.initialize()
