@@ -84,6 +84,31 @@ def _cell(value: str) -> str:
     return ' '.join(value.split()).replace('|', '\\|').replace('`', "'")
 
 
+def runtime_requirements(extras: list[str], distribution_lookup=None) -> list[str]:
+    """Select installed project roots; project extras do not leak to child packages."""
+    lookup = distribution_lookup or metadata.distribution
+    project = lookup('ai-companion')
+    available = {canonicalize_name(extra) for extra in project.metadata.get_all('Provides-Extra', [])}
+    selected = {canonicalize_name(extra) for extra in extras}
+    unknown = selected - available
+    if unknown:
+        raise ValueError(f'Unknown project extra: {sorted(unknown)[0]}')
+    roots = []
+    for raw in project.requires or ():
+        try:
+            requirement = Requirement(raw)
+        except InvalidRequirement as error:
+            raise ValueError(f'Invalid dependency: {raw}') from error
+        if requirement.marker and not any(
+            requirement.marker.evaluate({'extra': extra}) for extra in selected | {''}
+        ):
+            continue
+        # Already evaluated in the project's context. Child extras remain intact.
+        requirement.marker = None
+        roots.append(str(requirement))
+    return roots
+
+
 def render_notices(notices: list[PackageNotice]) -> str:
     lines = [
         '# Third-party runtime dependency inventory', '',
@@ -105,11 +130,13 @@ def render_notices(notices: list[PackageNotice]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--requirement', action='append')
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument('--requirement', action='append')
+    selection.add_argument('--extra', action='append', help='Include a declared project extra; repeat to combine.')
     parser.add_argument('--output', type=Path, default=Path(__file__).parents[1] / 'THIRD_PARTY_NOTICES.md')
     args = parser.parse_args()
     try:
-        requirements = args.requirement if args.requirement is not None else metadata.requires('ai-companion')
+        requirements = args.requirement if args.requirement is not None else runtime_requirements(args.extra or [])
         notices = collect_notices(requirements or [])
         if not notices:
             raise ValueError('No runtime dependency metadata found.')

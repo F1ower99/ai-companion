@@ -55,7 +55,7 @@ Models must already be downloaded and complete as described above. The app never
 
 Open chat and **hold** the recording button. Permission is requested following that action. Releasing while a permission prompt is pending cancels this recording; if permission is granted later, hold again to start a new one. While listening, release to stop/release the device and recognize in the background. A separate Cancel voice action discards the operation. Hiding/closing chat cancels it too; reopening never starts recording. A cancelled active decode must exit before another recording, with a visible waiting status. At 60 seconds the adapter releases the device and submits the captured portion once.
 
-The result fills only an empty editable draft. Existing typed text stays intact, and no voice result is sent or persisted until you explicitly press Send under the existing text-provider disclosure. Chinese Whisper base output has a known sample error; inspect/edit the draft. No natural-language task actions or synthesized playback are implemented. The optional Qt 6.11.2 native module has been imported successfully, but actual Windows microphone permission, device-format support and interruptions remain user-led manual acceptance; automated tests never use a microphone.
+The result fills only an empty editable draft. Existing typed text stays intact, and no voice result is sent or persisted until you explicitly press Send under the existing text-provider disclosure. Chinese Whisper base output has a known sample error; inspect/edit the draft. Natural-language task actions are not implemented. Explicit synthesized playback is described below. The optional Qt 6.11.2 native module has been imported successfully, but actual Windows microphone permission, device-format support and interruptions remain user-led manual acceptance; automated tests never use a microphone.
 
 ## Windows standalone build baseline
 
@@ -88,7 +88,21 @@ try {
 }
 ```
 
-Verify pet dragging/chat opening, task creation, local reminder controls, the database under `$smokeProfile\AICompanion`, and tray exit. Temporary LOCALAPPDATA isolates SQLite, **not Windows Credential Manager**. Do not open provider settings or send messages in this smoke run; use a separate Windows test account for credential/provider UX acceptance. Voice and startup-on-login remain disabled/unimplemented. No installer, signature, automatic update, or release publication is included.
+Verify pet dragging/chat opening, task creation, local reminder controls, the database under `$smokeProfile\AICompanion`, and tray exit. Temporary LOCALAPPDATA isolates SQLite, **not Windows Credential Manager**. Do not open provider settings or send messages in this smoke run; use a separate Windows test account for credential/provider UX acceptance. Leave voice opt-ins unset for this baseline smoke; packaged voice remains unverified and startup-on-login is unimplemented. No installer, signature, automatic update, or release publication is included.
+
+Dependency inventories must match the components intended for the build. The default [base inventory](THIRD_PARTY_NOTICES.md) covers the desktop core; the [voice inventory](docs/THIRD_PARTY_NOTICES_VOICE.md) also covers the optional recording, Whisper and Kokoro runtimes. Neither includes model licenses or certifies redistribution. For a current editable installation, select extras explicitly:
+
+```powershell
+python scripts/write_third_party_notices.py --extra voice --extra stt --extra tts --output docs/THIRD_PARTY_NOTICES_VOICE.md
+```
+
+Unknown extras fail before writing output. The tool reads installed project metadata: an older editable installation can lack newly declared extras. Refresh that installation from this checkout, or inventory the current `pyproject.toml` runtime roots explicitly without changing the shared environment:
+
+```powershell
+python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6.11.2' --requirement 'PySide6-Addons==6.11.2' --requirement 'faster-whisper==1.2.1' --requirement 'sherpa-onnx==1.13.8' --requirement 'numpy>=2,<3' --output docs/THIRD_PARTY_NOTICES_VOICE.md
+```
+
+`--extra` and `--requirement` are mutually exclusive; development/build extras are excluded unless explicitly selected. Qwen voice experiments use a separate environment and are not part of this app inventory.
 
 ## Tests
 
@@ -101,7 +115,7 @@ python -m compileall -q src tests
 python -m pip check
 ```
 
-The regression suite covers deterministic task decisions, SQLite migrations and reminder/calendar/chat/activity-preference persistence, local-time resolution, the compact Qt reminder UI, course-week rules, calendar exceptions, study-plan summaries, fake activity sensing, and offline provider request/error handling. Full verification commands are listed above. Manual Windows idle behavior, live provider UX, voice, packaging, and semantic memory search remain future work.
+The regression suite covers deterministic task decisions, SQLite migrations and reminder/calendar/chat/activity-preference persistence, local-time resolution, the compact Qt reminder UI, course-week rules, calendar exceptions, study-plan summaries, fake activity sensing, offline provider request/error handling, and local voice lifecycle/adapters with fake devices. Full verification commands are listed above. Manual Windows idle behavior, live provider UX, microphone acceptance, natural Chinese voice quality, standalone packaging, and semantic memory search remain unverified or deferred.
 
 ## Offline synthesis backend (Stage 7F, developer baseline)
 
