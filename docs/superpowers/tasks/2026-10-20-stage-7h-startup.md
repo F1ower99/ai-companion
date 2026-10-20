@@ -13,3 +13,5 @@ Ruling: conflict means a different existing command at the exact AICompanion val
 Validation: **669 tests passed in 12.74 seconds** in a real Windows process, offscreen Qt, temporary data and fake devices/stores. Compileall, pip check and diff check passed. No actual login startup was enabled, disabled or read for acceptance; manual logon and compiled startup are still unverified. README and roadmap now distinguish implemented source voice from naturalness, microphone and packaging gates.
 
 Independent final review: no actionable findings; reviewer independently passed all 23 core/configuration/tray tests. No dependencies, database migration, system service, scheduled task, administrator setting or microphone action added. Credential-pattern scan and final staged diff review passed. The actual user startup setting remains untouched.
+
+Stage commit `1396ce312746f625228aabc3cd68a2456bfca0dc` was normally pushed to `codex/stage7h-startup-setting` and fast-forwarded to main; remote main hash verified. No force push, history rewrite, actual startup-setting change or binary publication.

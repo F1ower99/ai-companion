@@ -35,4 +35,4 @@ Modify `desktop/tray.py`, `desktop/app.py`, add `tests/desktop/test_startup_tray
 - [x] Implement lazy menu action and app composition; rerun focused and lifecycle tests.
 - [x] Update README, roadmap and stage task record with actual manual acceptance limits.
 - [x] Full pytest, compileall, pip check, diff/secret checks; independent review; fix Important issues and rerun.
-- [ ] Commit stage separately and push normally only after all checks. No real Run entry created.
+- [x] Commit stage separately and push normally only after all checks. No real Run entry created.
