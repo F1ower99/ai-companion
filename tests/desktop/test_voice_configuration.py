@@ -77,3 +77,17 @@ def test_tts_independent_of_stt_and_lazy(monkeypatch,tmp_path,qapp):
     result,reason=config.build_speech_controller(qapp,environ={'AI_COMPANION_TTS_MODEL_DIR':str(tmp_path)},module_available=lambda name:True)
     assert reason is None and calls==[('provider',Path(tmp_path)),('playback',qapp)]
     result.preflight(); assert calls[-1]==('preflight',)
+
+
+@pytest.mark.parametrize('marker', ['nuitka', 'frozen'])
+def test_compiled_tts_is_disabled_before_dependency_or_device_access(monkeypatch, tmp_path, marker):
+    from companion.infrastructure import tts_process
+    if marker == 'nuitka':
+        monkeypatch.setattr(tts_process, '__compiled__', object(), raising=False)
+    else:
+        monkeypatch.setattr(tts_process.sys, 'frozen', True, raising=False)
+    def forbidden(*args):
+        raise AssertionError('Compiled TTS must fail before module/device setup')
+    result, reason = config.build_speech_controller(
+        environ={'AI_COMPANION_TTS_MODEL_DIR': str(tmp_path)}, module_available=forbidden)
+    assert result is None and '打包' in reason

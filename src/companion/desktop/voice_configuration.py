@@ -9,6 +9,7 @@ from pathlib import Path
 from companion.desktop.speech_controller import SpeechController
 from companion.infrastructure.local_kokoro import LocalKokoroSynthesizer
 from companion.infrastructure.qt_playback import QtAudioPlayback
+from companion.infrastructure.tts_process import source_tts_supported
 
 from companion.application.voice_session import VoiceSession
 from companion.desktop.voice_controller import VoiceController
@@ -42,6 +43,8 @@ def build_speech_controller(parent=None, *, environ=None, module_available=None)
     directory = environment.get('AI_COMPANION_TTS_MODEL_DIR', '').strip()
     if not directory:
         return None, '本地朗读未配置：请设置 AI_COMPANION_TTS_MODEL_DIR。'
+    if not source_tts_supported():
+        return None, '当前打包运行环境尚不支持本地朗读。'
     if ('://' in directory or ',' in directory or directory.startswith(('\\\\', '//'))
             or not Path(directory).is_absolute()):
         return None, '本地朗读需要绝对本地模型目录。'

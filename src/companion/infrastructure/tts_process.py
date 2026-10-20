@@ -12,9 +12,16 @@ from companion.infrastructure.tts_assets import MAX_PCM_BYTES
 from companion.domain.voice import VoiceErrorCode, VoiceOperationError
 
 
+def source_tts_supported():
+    # Compiled desktop executables are not Python interpreters accepting -m.
+    return not (getattr(sys, 'frozen', False) or '__compiled__' in globals())
+
+
 def run_tts_worker(request, token, *, process_factory=subprocess.Popen, monotonic=time.monotonic):
     if token.is_cancelled():
         raise VoiceOperationError(VoiceErrorCode.CANCELLED)
+    if not source_tts_supported():
+        raise VoiceOperationError(VoiceErrorCode.NOT_CONFIGURED)
     payload = json.dumps(request, ensure_ascii=True).encode('ascii')
     if len(payload) > 16384:
         raise VoiceOperationError(VoiceErrorCode.SPEECH_FAILED)
