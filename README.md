@@ -104,6 +104,14 @@ python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6
 
 `--extra` and `--requirement` are mutually exclusive; development/build extras are excluded unless explicitly selected. Qwen voice experiments use a separate environment and are not part of this app inventory.
 
+## Optional login startup (Stage 7H)
+
+The tray menu includes “开机启动（当前用户）”. It creates no startup entry by default and reads only this app's Run value when the menu opens. Only an explicit checkbox action enables or disables it. Disabling removes this application's `AICompanion` value from current-user Run; other entries remain untouched. No administrator access, service or scheduled task is used.
+
+Missing runtimes, unsupported platforms, an entry pointing to a different installation, access failures or a command exceeding Windows' 260-character limit show “开机启动暂不可用”. A long source checkout may be unavailable until installed at a shorter path. Source mode needs its Pythonw executable and checkout to stay present; packaged mode uses the current executable. Neither stores current command-line arguments, credentials or model environment settings. Close/reopen the tray menu to retry a temporary read failure. Moving an enabled installation requires manual handling of its old entry; no automatic migration is attempted.
+
+Tests use fake stores and never enable real login startup. Actual logon behavior and the compiled command need user-led validation after packaging. Startup may be delayed by Windows.
+
 ## Tests
 
 From PowerShell, activate the development environment and run:

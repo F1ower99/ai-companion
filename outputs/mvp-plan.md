@@ -156,16 +156,22 @@ Stage 3 已完成旧阶段号里的决策与延期模型；Stage 6 实现仅凭�
 
 ### 阶段 7：基础语音、打包和首版验收
 
-Stage 7A 已实现 provider-neutral 本地语音会话基础：PCM/转写校验、local-only ports、取消/打断及迟到结果隔离，Qt 转写只交接到空草稿。未配置真实引擎/设备适配器，语音按钮保持禁用。真实设备、自动到时停录、录音状态 UI、离线引擎选型仍待后续集成。云端语音不属于当前批准范围。
+Stage 7A 已实现 provider-neutral 本地语音会话基础：PCM/转写校验、local-only ports、取消/打断及迟到结果隔离，Qt 转写只交接到空草稿。后续 7C–7G 已接入本地识别、受限采集和显式朗读；默认不配置模型时语音保持关闭。云端语音不属于当前批准范围。
 
 Stage 7B 已建立 standalone 配置、无删除的构建入口、独立构建目录和依赖许可元数据清单。当前环境缺少 MSVC 与构建依赖，preflight 已正确阻止构建；未生成 exe，部署 dry-run 与真实打包/启动验收均未完成。说明见 README；临时 LOCALAPPDATA 不能隔离 Credential Manager，凭据验收需要单独 Windows 测试账号。
 
-Stage 7C 已按用户选择的离线模型方向实现可选 faster-whisper CPU/int8 识别适配器和受限 WAV smoke 工具；Whisper base 的固定发布版本与文件哈希已核验。11 秒公开英文样例在阻断 Python 网络连接后通过真实识别和 CLI 验证，分别约 0.95/0.76 秒；完整回归 470 项通过。中文质量尚未验证（公开中文样例下载因审批服务额度耗尽未执行）；麦克风/Qt worker 和本地朗读仍未接入。真实测试记录见 `docs/offline-stt-assets-2026-10-18.md`。
+Stage 7C 已按用户选择的离线模型方向实现可选 faster-whisper CPU/int8 识别适配器和受限 WAV smoke 工具；Whisper base 的固定发布版本与文件哈希已核验。公开英文样例已通过离线识别；中文样例已实际运行但有明显识别错误，尚未验收。WAV 工具的奇数尾字节问题已修复并通过回归测试。真实测试记录见 `docs/offline-stt-assets-2026-10-18.md`。
+
+Stage 7D/E 已实现受限 Qt 采集与后台识别交接：按住录音、60 秒上限、取消/隐藏释放、迟到结果隔离，草稿不会自动发送。自动测试只用假设备，真实麦克风体验仍待验收。
+
+Stage 7F/G 已实现本地 Kokoro 合成、显式朗读、停止与录音前打断。耳机实际播放/自然结束/停止已验证；用户认为默认及三种备选音色仍生硬，因此自然度未通过。Qwen Serena 是 E 盘隔离实验，尚未接入产品。发布清单已覆盖 36 个语音运行依赖；实际编译与许可证发行复核仍待完成。
+
+Stage 7H 增加默认不写入的当前用户开机启动选项：托盘打开时读取自己的 Run 值，用户勾选才写入；冲突值、无运行环境或过长命令时保持不可用。自动测试不访问真实注册表，实际登录与编译包启动仍待验收。
 
 **文件：**
 
-- 新建 `src/companion/ports/voice.py`、`adapters/voice/push_to_talk.py`、`tts.py`、`stt_provider.py`。
-- 新建 `src/companion/desktop/settings_window.py`、`tests/application/test_voice_session.py`。
+- `src/companion/ports/voice.py`、`application/voice_session.py`、`application/voice_synthesis.py`。
+- `src/companion/infrastructure/local_whisper.py`、`local_kokoro.py`、`qt_microphone.py`、`qt_playback.py` 与 desktop voice/speech controllers。
 - 添加 `pysidedeploy.spec`、许可清单和 Windows 构建说明。
 
 **接口：**
@@ -176,10 +182,10 @@ Stage 7C 已按用户选择的离线模型方向实现可选 faster-whisper CPU/
 - 录音仅在按住/点击麦克风控件后开始；UI 显示 Listening/Talking 状态；用户打断立即停止当前 TTS。
 
 - [x] 写 fake-provider voice session 测试：停录送 STT、取消不送出、用户插话调用 TTS.stop、错误码、音频清理及并发隔离。
-- [ ] 选择本地离线语音引擎，再安装 `.[voice]`（`PySide6-Addons==6.11.2`）并实现 Qt Multimedia 采集/播放；不接入云端语音。
+- [x] 选择离线引擎并实现可选 Qt Multimedia 采集/播放；真实麦克风和自然中文质量另行验收，不接入云端语音。
 - [ ] 运行全量测试和 `python -m companion.desktop.app`；构建 Windows 包后在新用户配置目录启动一次。
 - [ ] 完整复核私密数据目录、暂停监测、暂停麦克风、删除记忆、清除历史、关闭主动提醒五项控制。
-- [ ] 添加开机启动设置，默认关闭；只写当前用户 Run 项，用户关闭时删除本应用自己的条目。
+- [x] 添加默认不写入的开机启动设置，只操作当前用户本应用的 Run 值；真实登录和编译包验收仍未完成。
 
 ## 最终验收脚本
 
@@ -187,7 +193,7 @@ Stage 7C 已按用户选择的离线模型方向实现可选 faster-whisper CPU/
 2. 启动应用后，桌宠出现在主屏右下角；可拖动；点击打开聊天窗；托盘可退出。
 3. 在提醒设置中主动启用活动感知。最近有输入时为 `focused`，五分钟无输入后为 `idle`；暂停后下一次评估为 `unknown`。数据中没有应用名称或活动历史。
 4. recent activity 连续维持 120 分钟且高优先级任务未完成时，检查 Agent 是否按已有原因码决定提醒。
-5. 回复“再给我 20 分钟”；系统根据剩余计划决定是否接受。若接受，保存 one-time deadline，不改项目 hard deadline。
+5. 通过提醒卡选择延长 20 分钟；系统根据剩余计划决定是否接受。若接受，保存 one-time deadline，不改项目 hard deadline。自然语言动作解析尚未实现。
 6. deadline 到达后重新评估一次。完成高优先级任务后持续与桌宠交互，确认不会重复打扰。
 7. 暂停监测、暂停麦克风、删除记忆、清除对话和关闭提醒都能立即生效；日志里不出现 API Key。
 

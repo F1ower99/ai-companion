@@ -34,6 +34,26 @@ def test_lifecycle_subprocess_imports_companion_from_this_checkout():
     assert Path(result.stdout.strip()).resolve().is_relative_to(expected_source_root.resolve())
 
 
+def test_application_construction_does_not_query_or_modify_startup():
+    result = run_shell_script('''
+from PySide6.QtCore import QTimer
+from companion.desktop import startup_configuration
+class GuardStore:
+    def read(self):
+        raise AssertionError('Unexpected startup registry read')
+    def write(self, command):
+        raise AssertionError('Unexpected startup registry write')
+startup_configuration.WindowsStartupStore = GuardStore
+startup_configuration.build_launch_command = lambda *args: 'expected'
+from companion.desktop.app import create_application
+app = create_application(['startup-lazy-test'])
+assert app.tray_controller.startup_service is not None
+QTimer.singleShot(0, app.quit)
+raise SystemExit(app.exec())
+''')
+    assert result.returncode == 0, result.stderr
+
+
 def test_app_event_loop_exits_when_pet_closes_without_system_tray():
     code = """
 from PySide6.QtCore import QTimer

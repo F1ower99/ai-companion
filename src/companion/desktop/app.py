@@ -21,6 +21,7 @@ from companion.desktop.pet_window import PetWindow
 from companion.desktop.reminder_scheduler import ReminderScheduler
 from companion.desktop.tray import TrayController
 from companion.desktop.voice_configuration import build_voice_controller, build_speech_controller
+from companion.desktop.startup_configuration import build_startup_service
 from companion.infrastructure.system_clock import SystemClock
 from companion.infrastructure.openai_compatible import OpenAICompatibleProvider
 from companion.infrastructure.sqlite.chat_repositories import (
@@ -149,7 +150,7 @@ class CompanionApplication(QApplication):
                 "本地对话存储暂时不可用；任务与提醒仍可继续。"
             )
         self.pet_window = PetWindow(self.chat_window)
-        self.tray_controller = TrayController(self.pet_window, self.chat_window)
+        self.tray_controller = TrayController(self.pet_window, self.chat_window, startup_service=build_startup_service())
         self.pet_window.exitRequested.connect(self.quit)
         if self.tray_controller.icon is None:
             self.pet_window.closeRequested.connect(self.quit)
