@@ -20,7 +20,7 @@ Output and process lifetimes remain bounded; no private conversation context, de
 
 ## Storage decision and execution boundary
 
-The initial workspace-volume check found less than1GiB free. The user then explicitly selected E drive for the new model. Use E:/AICompanionVoiceLab for weights, isolated runtime, caches, temporary files and evidence; filesystem access was granted. Reserve at least15GiB headroom before setup. Existing project dependencies remain unchanged. qwen-tts0.1.1 wheel SHA25611a290d8dabc7ef91a90c54478c8ab19b3edb1d85c0882313721892bdc4af15d verified from official PyPI. Runtime and model acquisition have started; no successful inference or listening acceptance is claimed.
+The initial workspace-volume check found less than1GiB free. The user then explicitly selected E drive for the new model. Use E:/AICompanionVoiceLab for weights, isolated runtime, caches, temporary files and evidence; filesystem access was granted. Reserve at least15GiB headroom before setup. Existing project dependencies remain unchanged. qwen-tts0.1.1 wheel SHA25611a290d8dabc7ef91a90c54478c8ab19b3edb1d85c0882313721892bdc4af15d verified from official PyPI. Acquisition and public-fixture synthesis subsequently completed; see `docs/offline-qwen-voice-probe-2026-10-21.md`. Listening acceptance and production integration remain pending.
 
 ## Sources
 

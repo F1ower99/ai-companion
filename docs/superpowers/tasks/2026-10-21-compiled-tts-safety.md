@@ -9,3 +9,5 @@ TDD: Nuitka/frozen tests at both boundaries failed before implementation (four R
 The source-runtime behavior, independent microphone path and existing synthesis/playback protocol remain unchanged. This is not a claim that an actual binary was built. Full regression: **701 passed in 13.25 seconds**. Compileall, pip check and diff check passed. Independent review found no actionable findings and independently passed 18 runtime/configuration tests.
 
 Primary references: [Nuitka runtime detection](https://nuitka.net/user-documentation/tips.html) and [compiled executable behavior](https://nuitka.net/user-documentation/common-issue-solutions.html). Actual packaged execution remains a separate release gate; these tests simulate supported compilation markers without starting a desktop subprocess.
+
+Commit `5cf08efc1d45a0f69b8108990286c45c42971807` normally pushed to `codex/compiled-tts-safety` and fast-forwarded to main; remote hash verified. No compiled binary produced or published.
