@@ -55,6 +55,50 @@ raise SystemExit(app.exec())
     assert result.returncode == 0, result.stderr
 
 
+def test_application_wires_pet_voice_feedback_without_real_devices():
+    result = run_shell_script('''
+from PySide6.QtCore import QObject, Signal
+from companion.desktop import app as app_module
+from companion.domain.pet_activity import PetActivity
+class Controller(QObject):
+    stateChanged = Signal(str)
+    errorOccurred = Signal(object)
+    transcriptReady = Signal(object)
+    state = 'idle'
+    can_record = True
+    can_speak = True
+    def change(self, state): self.state = state; self.stateChanged.emit(state)
+    def press(self): raise AssertionError('Unexpected capture')
+    def release(self): raise AssertionError('Unexpected capture release')
+    def speak(self, text): raise AssertionError('Unexpected playback')
+    def cancel(self): self.change('idle'); return True
+    def close(self): self.change('unavailable')
+app_module.build_voice_controller = lambda parent: (Controller(parent), None)
+app_module.build_speech_controller = lambda parent: (Controller(parent), None)
+app = app_module.create_application(['pet-voice-feedback-test'])
+assert app.pet_voice_bridge.parent() is app.pet_window
+assert app.pet_window.activity is PetActivity.IDLE
+assert not app.pet_window.animation_timer.isActive()
+app.voice_controller.change('permission')
+assert app.pet_window.activity is PetActivity.IDLE
+app.voice_controller.change('listening')
+assert app.pet_window.activity is PetActivity.LISTENING
+assert app.pet_window.animation_timer.isActive()
+app.voice_controller.change('transcribing')
+assert app.pet_window.activity is PetActivity.PROCESSING
+app.speech_controller.change('playing')
+assert app.pet_window.activity is PetActivity.SPEAKING
+app.chat_window.show()
+app.chat_window.hide()
+assert app.pet_window.activity is PetActivity.IDLE
+assert not app.pet_window.animation_timer.isActive()
+app.reminder_scheduler.stop()
+app.pet_window.hide()
+app.quit()
+''')
+    assert result.returncode == 0, result.stderr
+
+
 def test_application_wires_memory_panel_to_isolated_local_store():
     result = run_shell_script('''
 from PySide6.QtCore import QTimer

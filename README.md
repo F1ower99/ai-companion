@@ -106,6 +106,8 @@ python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6
 
 ## Experimental isolated Qwen speech (Stage 7K)
 
+The character also reflects explicit local voice operations: a blue listening collar cue, purple processing dots, or a small speaking mouth. Permission requests and cancellation do not display recording. Cues use only controller state, never audio/text or activity monitoring, and stop animating when idle or hidden. Controller absence/default-off leaves the original idle pet unchanged. These cues do not start devices, move the pet or open another window.
+
 Kokoro remains the default engine. Source runs can explicitly select the already verified Qwen3-TTS 1.7B CustomVoice candidate using a separate trusted Python environment. It uses Serena and a fixed gentle Chinese style. It is experimental: listening acceptance is pending, and the public short sentence took about 34 seconds end-to-end on this machine. Each explicit Speak starts a fresh owned process; Stop/hide/clear-conversation cancels it. Nothing plays automatically.
 
 For the existing E-drive lab, set these variables only in the shell used to launch the source app:

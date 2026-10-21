@@ -19,6 +19,7 @@ from companion.application.memory_management import MemoryManagementService
 from companion.domain.errors import StorageError
 from companion.desktop.chat_window import ChatWindow
 from companion.desktop.pet_window import PetWindow
+from companion.desktop.pet_voice_state import PetVoiceStateBridge
 from companion.desktop.reminder_scheduler import ReminderScheduler
 from companion.desktop.tray import TrayController
 from companion.desktop.voice_configuration import build_voice_controller, build_speech_controller
@@ -155,6 +156,9 @@ class CompanionApplication(QApplication):
                 "本地对话存储暂时不可用；任务与提醒仍可继续。"
             )
         self.pet_window = PetWindow(self.chat_window)
+        self.pet_voice_bridge = PetVoiceStateBridge(
+            self.pet_window, self.voice_controller, self.speech_controller,
+        )
         self.tray_controller = TrayController(self.pet_window, self.chat_window, startup_service=build_startup_service())
         self.pet_window.exitRequested.connect(self.quit)
         if self.tray_controller.icon is None:
