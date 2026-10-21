@@ -1,0 +1,11 @@
+# Clear-conversation voice boundary execution
+
+Base `c6a7554`, branch `codex/clear-conversation-voice-boundary`. Follow-up to the Stage 7 final privacy-control acceptance, not a new product stage. Bounded design: `../specs/2026-10-21-clear-conversation-voice-boundary-design.md`.
+
+Root cause: ChatWindow.clear_conversation cleared persisted messages and composer but never called the existing voice cancellation protocols. refresh_transcript only changed future speech selection. A queued synthesis could therefore play after deletion and a queued transcription could refill the cleared draft. Controller generation handling was already correct when cancellation was actually invoked.
+
+Plan executed inline: reproduce with real controllers/fake devices and manually driven workers; invoke both existing cancellation paths after confirmation and before deletion; return aggregate stop success, contain per-controller exceptions, and refuse to claim a clear when stop fails; exercise error/decline/busy paths; run complete regression and independent review; inspect and commit. No schema, core scheduling or dependency changes.
+
+RED evidence: nine failures and two passing negative cases before production changes. The failures included queued/already-returned synthesis, active playback, pending permission, pending/returned transcription and all three stop-failure cases. Test cleanup was corrected to restore fake throwing callbacks in finally, avoiding unrelated teardown errors. GREEN focused run: 74 passed before adding storage-failure coverage. No real recording, audio playback, model, provider, credential or user database was accessed.
+
+Final focused run including storage-failure preservation: 75 passed. Full real-Windows offscreen regression: 798 passed in 11.78 seconds. compileall, pip check and diff whitespace checks passed. Reviewed changed/new files for secret patterns; none found. README also corrects an obsolete startup statement and explicitly notes that a temporary LOCALAPPDATA does not isolate the startup registry value. Fresh-context independent review found no actionable issues and independently ran all 12 new boundary cases successfully. Real-device/manual voice quality and release gates remain unclaimed.

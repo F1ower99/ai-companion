@@ -265,10 +265,18 @@ class ChatWindow(QDialog):
         self.voice_controller.press()
 
     def _cancel_voice(self):
+        stopped = True
         if self.speech_controller is not None:
-            self.speech_controller.cancel()
+            try:
+                stopped = self.speech_controller.cancel() is True
+            except Exception:
+                stopped = False
         if self.voice_controller is not None:
-            self.voice_controller.cancel()
+            try:
+                self.voice_controller.cancel()
+            except Exception:
+                stopped = False
+        return stopped
 
     def _speak_reply(self):
         if self.speak_reply_button.isEnabled() and self.speech_controller is not None and self._speech_text:
@@ -683,6 +691,9 @@ class ChatWindow(QDialog):
         if self.chat_service is None or self.is_busy:
             return
         if not self.confirmation_handler("clear_conversation"):
+            return
+        if not self._cancel_voice():
+            self.status_label.setText("无法确认语音已停止；请先停止语音，再重试清空对话。")
             return
         try:
             conversation = self.chat_service.active_conversation()

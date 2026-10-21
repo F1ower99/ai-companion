@@ -1,0 +1,11 @@
+# Clear-conversation voice boundary
+
+Bounded privacy correction within Stage 7 final control acceptance. Inspection found that clearing conversation removes SQLite messages and draft text but leaves current speech synthesis/playback and pending voice transcription active. The existing controller cancellation generations already suppress late audio/transcripts; the clear action does not invoke them.
+
+After the existing explicit deletion confirmation, cancel both speech and capture/transcription before deleting conversation data. Attempt each cancellation independently so one controller exception cannot leave the other untouched. Speech cancellation must return True; capture cancellation normally returns None. An exception or unconfirmed playback stop blocks deletion with a static message asking the user to stop voice and retry. This avoids reporting a complete clear while old content may still play. Cancellation may complete asynchronously, provided controller generation invalidation has happened synchronously. Never wait on the UI thread.
+
+Declined confirmation and busy text requests keep current behavior and do not cancel voice. Successful deletion uses the same service, confirmation and transcript refresh. Storage failure retains existing data/error behavior even though voice has already been cancelled. No real device access, schema, scheduling, model/runtime changes or global chat semantics.
+
+Alternatives: deleting first leaves old voice active; cancelling without checking stop failure can falsely claim success. Reuse existing cancellation protocols with a boolean aggregate at the UI boundary. The same helper used by hide/stop remains best-effort and attempts both controllers.
+
+Acceptance: queued/completed synthesis cannot play after clear; active playback is stopped; late permission cannot start capture; queued transcription cannot refill the cleared draft; rejected/busy clear does not cancel; failed or throwing cancellation attempts both sides and leaves messages with a sanitized failure; success preserves normal clear behavior. Tests use public fixtures, fake devices and manually driven workers only. Full regression and independent review precede commit/integration. Autonomous authorization permits this reversible correction without a review pause.

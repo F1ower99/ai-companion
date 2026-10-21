@@ -88,7 +88,7 @@ try {
 }
 ```
 
-Verify pet dragging/chat opening, task creation, local reminder controls, the database under `$smokeProfile\AICompanion`, and tray exit. Temporary LOCALAPPDATA isolates SQLite, **not Windows Credential Manager**. Do not open provider settings or send messages in this smoke run; use a separate Windows test account for credential/provider UX acceptance. Leave voice opt-ins unset for this baseline smoke; packaged voice remains unverified and startup-on-login is unimplemented. No installer, signature, automatic update, or release publication is included.
+Verify pet dragging/chat opening, task creation, local reminder controls, the database under `$smokeProfile\AICompanion`, and tray exit. Temporary LOCALAPPDATA isolates SQLite, **not Windows Credential Manager or the current user's startup registry value**. Do not open provider settings, toggle startup or send messages in this smoke run; use a separate Windows test account for credential/provider and startup UX acceptance. Leave voice opt-ins unset for this baseline smoke; packaged voice and actual startup-on-login behavior remain unverified. No installer, signature, automatic update, or release publication is included.
 
 Dependency inventories must match the components intended for the build. The default [base inventory](THIRD_PARTY_NOTICES.md) covers the desktop core; the [voice inventory](docs/THIRD_PARTY_NOTICES_VOICE.md) also covers the optional recording, Whisper and Kokoro runtimes. Neither includes model licenses or certifies redistribution. For a current editable installation, select extras explicitly:
 
@@ -113,6 +113,8 @@ Enter or “预览” only displays the proposed action. “确认操作” appl
 This is a strict local command grammar, not general conversation understanding. Questions, negations, mixed commands, time-of-day requests and ambiguous custom snooze durations such as “稍后20分钟” are rejected. Use “延长20分钟” for a one-time extension request. Raw reply text is not sent to a provider, stored in conversation/memory or persisted in reminder events. General chat and microphone behavior are unchanged.
 
 ## Inspect and delete saved memories (Stage 7I)
+
+“清空对话” first asks for confirmation, then cancels current local speech and pending recording/transcription before clearing the conversation and draft. Late results cannot restart playback or refill the cleared draft. If playback stop cannot be confirmed, the conversation stays in place and a local error asks you to stop voice and retry. Declining confirmation leaves the current voice operation running. Saved memories remain separate from conversation deletion.
 
 Open “模型与隐私设置” → “管理本地记忆” to inspect existing local memories. Search by literal content, filter the five memory categories, and browse 50 records per page. Expired records are visible by default in this management panel; normal chat retrieval still excludes them. Opening the panel does not save provider form edits or access credentials/network services.
 
