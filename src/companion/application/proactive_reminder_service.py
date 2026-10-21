@@ -52,6 +52,11 @@ class ProactiveReminderService:
             clock = self.clock.snapshot(preferences)
         except Exception:
             return self._silent(ReasonCode.TIME_CONTEXT_UNAVAILABLE)
+        if not preferences.enabled:
+            # The disabled consumer needs no task data or activity sampling.
+            return Decision(
+                DecisionKind.SILENT, clock.now_utc, (ReasonCode.REMINDERS_DISABLED,),
+            )
         try:
             decision = self._evaluate_at(clock, preferences)
         except StorageError:

@@ -106,6 +106,8 @@ python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6
 
 ## Reply to a reminder locally (Stage 7J)
 
+Saving “启用主动提醒” as off dismisses the current reminder and any pending reply proposal. Disabled reminder evaluations do not load task/reminder state or sample activity. The separate activity-awareness opt-in is preserved; re-enabling reminders evaluates current data again. Pausing activity awareness immediately prevents activity-source sampling and persists independently of the reminder switch.
+
 Automatic reminder cards still do not take keyboard focus. Click “回复提醒…” to open a small input panel for that specific task. Supported examples include “现在做”, “稍后”, “再给我半小时”, “延长30分钟”, “今天跳过” and “已完成”. Arabic/fullwidth and canonical Chinese minute numbers from 1–120 are supported, with explicit half/one/one-and-half/two-hour forms.
 
 Enter or “预览” only displays the proposed action. “确认操作” applies it through the existing reminder service; deadlines, quiet hours, cooldown and the one-extension-per-day rule can still reject it. Editing the reply invalidates the preview. Cancelling only closes the input panel; dismissing/replacing the reminder or choosing an existing quick action discards any pending text proposal. Text and undo history clear on hide.

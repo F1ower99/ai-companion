@@ -201,6 +201,22 @@ def service_factory():
     return build
 
 
+def test_disabled_reminders_do_not_load_tasks_or_sample_activity_and_resume_fresh(service_factory):
+    service, clock, tasks, reminders, prefs, activity = service_factory(
+        preferences=ReminderPreferences(enabled=False),
+    )
+    for _ in range(2):
+        decision = service.evaluate()
+        assert decision.kind is DecisionKind.SILENT
+        assert decision.reason_codes == (ReasonCode.REMINDERS_DISABLED,)
+        assert decision.generated_at == clock.current
+    assert tasks.list_calls == 0 and reminders.read_dates == [] and activity.calls == []
+    assert reminders.states == {} and reminders.events == {}
+    prefs.value = replace(prefs.value, enabled=True)
+    assert service.evaluate().kind is DecisionKind.SHOW_REMINDER
+    assert tasks.list_calls > 0 and reminders.read_dates and activity.calls == [clock.current]
+
+
 def test_evaluate_persists_before_returning_show(service_factory):
     service, clock, _, reminders, _, _ = service_factory()
     decision = service.evaluate()

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -266,4 +267,100 @@ assert FakeWindowsActivitySource.instances[0].calls == 0
 app.pet_window.close()
 '''
     result = run_application_script(code, tmp_path / "stage6-app.sqlite3")
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('control', ['activity', 'reminders'])
+def test_privacy_controls_apply_through_real_application_composition(control):
+    code = '''
+from datetime import datetime, timedelta, timezone
+from companion.desktop import app as app_module
+from companion.infrastructure.system_clock import SystemClock
+from companion.infrastructure.windows_credentials import WindowsCredentialStore
+from companion.application.activity_awareness_service import ActivityAwarenessService
+from companion.infrastructure.sqlite.activity_preferences import SQLiteActivityPreferencesRepository
+from companion.infrastructure.sqlite.repositories import SQLiteReminderPreferencesRepository
+from companion.domain.models import Priority
+from companion.domain.reminders import ActivitySnapshot, ActivityState
+
+LOCAL = timezone(timedelta(hours=8))
+NOW = datetime(2026, 10, 21, 20, 10, tzinfo=LOCAL)
+class FixedResolver:
+    def now_local(self): return NOW
+    def resolve_local(self, day, wall):
+        return datetime.combine(day, wall).replace(tzinfo=LOCAL)
+class ActivitySource:
+    available = True
+    def __init__(self): self.calls = self.resets = 0
+    def snapshot(self, at):
+        self.calls += 1
+        return ActivitySnapshot(ActivityState.FOCUSED, at, NOW.replace(hour=18, minute=0))
+    def reset(self): self.resets += 1
+def forbidden(*args):
+    raise AssertionError('Unexpected real credential access')
+WindowsCredentialStore.get = forbidden
+WindowsCredentialStore.set = forbidden
+WindowsCredentialStore.delete = forbidden
+app_module.SystemClock = lambda: SystemClock(FixedResolver())
+app_module.WindowsIdleActivitySource = ActivitySource
+app_module.build_voice_controller = lambda parent: (None, 'test disabled')
+app_module.build_speech_controller = lambda parent: (None, 'test disabled')
+app = app_module.create_application(['privacy-composition-test'])
+source = app.activity_awareness_service.source
+assert source.calls == 0
+goal = app.task_service.add_goal('Public study goal')
+task = app.task_service.add_task(
+    'Public vocabulary task', goal.id, NOW.date(), 20, Priority.P1,
+    planned_start_at=NOW.replace(hour=19, minute=30),
+)
+window = app.chat_window
+window.show()
+window.open_reminder_settings()
+settings = window.reminder_settings_dialog
+settings.activity_awareness_checkbox.setChecked(True)
+assert source.calls > 0 and source.resets == 1
+card = window.reminder_card
+assert card is not None and card.isVisible()
+card.reply_button.click()
+panel = card.reply_dialog
+panel.reply_input.setText('已完成')
+panel.preview_button.click()
+assert panel.confirm_button.isEnabled()
+calls = source.calls
+database = app.task_service.tasks.database
+'''
+    if control == 'activity':
+        code += '''
+settings.activity_awareness_checkbox.setChecked(False)
+assert source.resets == 2 and source.calls == calls
+app.reminder_scheduler.evaluate_now()
+assert source.calls == calls
+fresh = ActivityAwarenessService(ActivitySource(), SQLiteActivityPreferencesRepository(database))
+assert fresh.get_preferences().enabled is False
+assert fresh.snapshot(NOW).state is ActivityState.UNKNOWN and fresh.source.calls == 0
+assert app.reminder_service.get_preferences().enabled is True
+'''
+    else:
+        code += '''
+before = app.reminder_service.reminders.get_task_states(NOW.date())
+settings.enabled_checkbox.setChecked(False)
+settings.save_button.click()
+assert not card.isVisible() and not panel.isVisible()
+assert panel.reply_input.text() == '' and not panel.confirm_button.isEnabled()
+panel._confirm()
+assert app.task_service.get_task(task.id).status.value == 'open'
+assert app.reminder_service.reminders.get_task_states(NOW.date()) == before
+assert SQLiteReminderPreferencesRepository(database).get_preferences().enabled is False
+app.reminder_scheduler.evaluate_now()
+assert source.calls == calls, 'Disabled reminders still sampled activity'
+'''
+    code += '''
+app.reminder_scheduler.stop()
+window.hide()
+if window.reminder_card is not None:
+    window.reminder_card.dismiss()
+app.pet_window.hide()
+app.quit()
+'''
+    result = run_shell_script(code)
     assert result.returncode == 0, result.stderr
