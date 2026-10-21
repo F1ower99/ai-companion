@@ -1,5 +1,6 @@
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -22,7 +23,9 @@ def test_selected_runtime_and_fixed_module_with_minimal_offline_environment(path
         runtime=runtime, work_directory=work, process_factory=factory,
     ) == wire()
     command, options = calls[0]
-    assert command == [str(runtime.resolve()), '-s', '-m', 'companion.infrastructure.qwen_tts_worker']
+    assert command[:4] == [str(runtime.resolve()), '-I', '-X', 'pycache_prefix=' + str(work.resolve() / 'cache/pycache')]
+    assert command[4:6] == ['-c', qwen_process.WORKER_BOOTSTRAP]
+    assert command[6] == options['env']['PYTHONPATH']
     assert 'private sentence' not in ' '.join(command)
     assert options['shell'] is False and options['stderr'] == subprocess.DEVNULL
     env = options['env']
@@ -62,3 +65,44 @@ def test_cancelled_or_compiled_runtime_never_spawns(paths, monkeypatch):
             qwen_process.run_qwen_worker({}, token, runtime=runtime, work_directory=work,
                                          process_factory=forbidden)
         assert error.value.code is expected
+
+
+def test_compiled_qwen_uses_verified_bundle_as_sole_child_import_path(paths, monkeypatch):
+    _, runtime, work = paths
+    bundle = work / 'companion-qwen-worker.zip'; bundle.write_bytes(b'fixture')
+    calls, resolutions = [], []
+    monkeypatch.setattr(qwen_process, 'source_tts_supported', lambda: False)
+    def resolve(**options): resolutions.append(options); return bundle
+    monkeypatch.setattr(qwen_process, 'worker_import_path', resolve)
+    token = CancellationFlag(); process = Process(token)
+    def factory(command, **options): calls.append((command, options)); return process
+    assert qwen_process.run_qwen_worker({}, token, runtime=runtime, work_directory=work,
+                                       process_factory=factory) == wire()
+    assert resolutions == [{'compiled': True}]
+    assert calls[0][1]['env']['PYTHONPATH'] == str(bundle)
+    assert calls[0][0][-3:] == ['-c', qwen_process.WORKER_BOOTSTRAP, str(bundle)]
+    assert '-I' in calls[0][0]
+    assert process.reaped
+
+
+def test_real_child_cannot_import_shadow_worker_from_inherited_cwd(tmp_path, monkeypatch):
+    import sys
+    import zipfile
+    archive = tmp_path / 'verified.zip'
+    with zipfile.ZipFile(archive, 'w') as package:
+        package.writestr('companion/__init__.py', '')
+        package.writestr('companion/infrastructure/__init__.py', '')
+        package.writestr('companion/infrastructure/qwen_tts_worker.py',
+            'import sys\nsys.stdin.buffer.read()\nsys.stdout.buffer.write(' + repr(wire()) + ')\n')
+    shadow = tmp_path / 'launch'; (shadow / 'companion/infrastructure').mkdir(parents=True)
+    (shadow / 'companion/__init__.py').write_text('')
+    (shadow / 'companion/infrastructure/__init__.py').write_text('')
+    marker = shadow / 'executed-shadow'
+    (shadow / 'companion/infrastructure/qwen_tts_worker.py').write_text(
+        'from pathlib import Path\nPath(' + repr(str(marker)) + ').touch()\n')
+    monkeypatch.chdir(shadow)
+    monkeypatch.setattr(qwen_process, 'source_tts_supported', lambda: False)
+    monkeypatch.setattr(qwen_process, 'worker_import_path', lambda **_: archive)
+    result = qwen_process.run_qwen_worker({}, CancellationFlag(), runtime=Path(sys.executable),
+                                          work_directory=tmp_path)
+    assert result == wire() and not marker.exists()

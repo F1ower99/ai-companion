@@ -54,3 +54,32 @@ def test_unknown_engine_and_compiled_qwen_fail_before_optional_access(tmp_path, 
     monkeypatch.setattr(config, 'source_tts_supported', lambda: False)
     result, reason = config.build_speech_controller(environ=environment(tmp_path), module_available=forbidden)
     assert result is None and '打包' in reason
+
+
+def test_verified_compiled_qwen_allows_lazy_controller_without_model_imports(tmp_path, monkeypatch):
+    probes, checks, calls = [], [], []
+    monkeypatch.setattr(config, 'source_tts_supported', lambda: False)
+    monkeypatch.setattr(config, 'worker_import_path', lambda **kw: checks.append(kw) or tmp_path / 'worker.zip')
+    class Provider:
+        def __init__(self, *args): calls.append('provider')
+        def validate_model_directory(self): calls.append('preflight')
+    monkeypatch.setattr(config, 'LocalQwenSynthesizer', Provider)
+    monkeypatch.setattr(config, 'QtAudioPlayback', lambda parent: calls.append('playback'))
+    monkeypatch.setattr(config, 'SpeechController', lambda *a, **k: object())
+    result, reason = config.build_speech_controller(environ=environment(tmp_path),
+        module_available=lambda name: probes.append(name) or True)
+    assert result is not None and reason is None
+    assert checks == [{'compiled': True}]
+    assert probes == ['PySide6.QtMultimedia']
+    assert calls == ['provider', 'playback']
+
+
+def test_verified_bundle_without_multimedia_never_constructs_devices(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'source_tts_supported', lambda: False)
+    monkeypatch.setattr(config, 'worker_import_path', lambda **_: tmp_path / 'worker.zip')
+    def forbidden(*args): pytest.fail('Unavailable multimedia constructed device', pytrace=False)
+    monkeypatch.setattr(config, 'QtAudioPlayback', forbidden)
+    monkeypatch.setattr(config, 'LocalQwenSynthesizer', forbidden)
+    result, reason = config.build_speech_controller(environ=environment(tmp_path),
+                                                   module_available=lambda _: False)
+    assert result is None and 'voice' in reason

@@ -49,6 +49,7 @@ def test_build_preserves_old_artifacts_and_passes_paths_as_arguments(tmp_path):
     root = tmp_path / 'project with spaces'
     (root / 'src' / 'companion' / 'desktop').mkdir(parents=True)
     (root / 'src' / 'companion' / 'desktop' / 'app.py').write_text('raise RuntimeError("must not launch")')
+    copy_worker_fixture(root)
     (root / 'pyproject.toml').write_text('[project]\nname="fixture"')
     (root / 'pysidedeploy.spec').write_text((Path(__file__).parents[2] / 'pysidedeploy.spec').read_text())
     old = root / 'dist' / 'old-build'
@@ -95,6 +96,7 @@ def test_powershell_entry_reports_missing_venv_with_spaces(tmp_path):
 def make_project(root):
     (root / 'src' / 'companion' / 'desktop').mkdir(parents=True)
     (root / 'src' / 'companion' / 'desktop' / 'app.py').write_text('raise RuntimeError("must not launch")')
+    copy_worker_fixture(root)
     (root / 'pyproject.toml').write_text('[project]\nname="fixture"')
     (root / 'pysidedeploy.spec').write_text((Path(__file__).parents[2] / 'pysidedeploy.spec').read_text())
 
@@ -114,6 +116,10 @@ def test_explicit_artifact_root_contains_staging_cache_temp_and_output(tmp_path)
     assert output.is_relative_to(artifacts) and not (root / 'build').exists()
     assert not (root / 'dist').exists() and (old / 'keep.txt').read_text() == 'keep'
     args, options = calls[0]
+    import configparser, shlex
+    config = configparser.ConfigParser(); config.read(options['cwd'] / 'pysidedeploy.spec')
+    extras = shlex.split(config['nuitka']['extra_args'])
+    assert '--include-data-files=' + (options['cwd'] / 'companion-qwen-worker.zip').as_posix() + '=companion-qwen-worker.zip' in extras
     assert options['cwd'].is_relative_to(artifacts)
     for key in ('NUITKA_CACHE_DIR', 'TEMP', 'TMP', 'PYTHONPYCACHEPREFIX'):
         assert Path(options['env'][key]).is_relative_to(artifacts)
@@ -168,3 +174,49 @@ def test_artifact_root_rejects_resolved_network_destination(tmp_path, monkeypatc
                         Path(r'\\server\share\artifacts') if path == artifacts else original(path, *a, **k))
     with pytest.raises(ValueError):
         module._artifact_directory(root.resolve(), artifacts)
+
+
+def test_worker_bundle_is_deterministic_allowlisted_and_embeds_its_digest(tmp_path):
+    import hashlib
+    import zipfile
+    module = load_script('windows_build')
+    source = Path(__file__).parents[2] / 'src'
+    stages = [tmp_path / 'stage one', tmp_path / 'stage two']
+    for stage in stages:
+        shutil.copytree(source, stage / 'src', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    archives = [module.build_speech_worker_bundle(stage) for stage in stages]
+    assert archives[0].read_bytes() == archives[1].read_bytes()
+    with zipfile.ZipFile(archives[0]) as archive:
+        names = set(archive.namelist())
+        assert 'companion/infrastructure/qwen_tts_worker.py' in names
+        assert 'companion/domain/voice.py' in names
+        assert not any('desktop' in name or 'sqlite' in name for name in names)
+        assert len(names) == 9
+    digest = hashlib.sha256(archives[0].read_bytes()).hexdigest()
+    manifest = stages[0] / 'src/companion/infrastructure/_qwen_worker_manifest.py'
+    namespace = {}; exec(manifest.read_text(), namespace)
+    assert namespace['WORKER_BUNDLE_SHA256'] == digest
+
+
+def copy_worker_fixture(root):
+    module = load_script('windows_build')
+    actual = Path(__file__).parents[2] / 'src'
+    for name in module.WORKER_FILES:
+        target = root / 'src' / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(actual / name, target)
+
+
+@pytest.mark.parametrize('kind', ['missing', 'linked', 'oversized'])
+def test_worker_bundle_rejects_invalid_sources_before_creating_archive(tmp_path, monkeypatch, kind):
+    module = load_script('windows_build')
+    root = tmp_path / 'stage'; make_project(root)
+    target = root / 'src' / module.WORKER_FILES[-1]
+    if kind == 'missing': target.unlink()
+    elif kind == 'oversized': target.write_bytes(b'x' * (128 * 1024 + 1))
+    else:
+        original = Path.is_symlink
+        monkeypatch.setattr(Path, 'is_symlink', lambda p: p == target or original(p))
+    with pytest.raises((ValueError, OSError)):
+        module.build_speech_worker_bundle(root)
+    assert not (root / 'companion-qwen-worker.zip').exists()

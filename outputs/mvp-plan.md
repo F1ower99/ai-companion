@@ -176,6 +176,8 @@ Stage 7K 增加显式配置的实验性 Qwen Serena 朗读适配器：仅源码�
 
 Stage 7L 将现有语音控制器状态映射到桌宠：录音领结提示、本地处理小点、朗读嘴型。只反映用户显式语音操作，权限请求不伪装成录音；取消、错误和空闲回到静态状态，隐藏或空闲时不运行动画计时器。没有新增监测、自动发声、内容读取、持久化或依赖。
 
+Stage 7N 为显式 Qwen 增加编译版 worker：构建时生成 9 模块固定 ZIP 并把哈希嵌入暂存源码，运行时仅使用已验证的相邻 ZIP 和单独指定的离线 Python。修复了启动目录同名模块可遮蔽 worker 的问题。真实编译 probe 完成无声公开句子合成和取消回收，GUI 默认关闭启动通过。Kokoro 编译 guard 保留；中文音色、真实麦克风和完整语音交互尚未人工验收。
+
 **文件：**
 
 - `src/companion/ports/voice.py`、`application/voice_session.py`、`application/voice_synthesis.py`。

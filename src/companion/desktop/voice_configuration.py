@@ -11,6 +11,8 @@ from companion.infrastructure.local_kokoro import LocalKokoroSynthesizer
 from companion.infrastructure.local_qwen import LocalQwenSynthesizer
 from companion.infrastructure.qt_playback import QtAudioPlayback
 from companion.infrastructure.tts_process import source_tts_supported
+from companion.infrastructure.qwen_worker_bundle import worker_import_path
+from companion.domain.voice import VoiceOperationError
 
 from companion.application.voice_session import VoiceSession
 from companion.desktop.voice_controller import VoiceController
@@ -68,7 +70,10 @@ def build_speech_controller(parent=None, *, environ=None, module_available=None)
 
 def _build_qwen_speech_controller(parent, environment, module_available):
     if not source_tts_supported():
-        return None, '当前打包运行环境尚不支持 Qwen 本地朗读。'
+        try:
+            worker_import_path(compiled=True)
+        except VoiceOperationError:
+            return None, '当前打包运行环境缺少完整 Qwen 本地朗读 worker。'
     values = [environment.get(name, '').strip() for name in (
         'AI_COMPANION_QWEN_MODEL_DIR', 'AI_COMPANION_QWEN_PYTHON', 'AI_COMPANION_QWEN_WORK_DIR',
     )]

@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import hashlib
+import shlex
+import zipfile
 from importlib import metadata
 import os
 from pathlib import Path
@@ -78,6 +81,42 @@ def _local_artifact_drive(path: Path) -> bool:
     return reader(path.anchor) in (2, 3, 6)
 
 
+WORKER_FILES = (
+    'companion/__init__.py', 'companion/domain/__init__.py',
+    'companion/infrastructure/__init__.py', 'companion/domain/errors.py',
+    'companion/domain/voice.py', 'companion/infrastructure/tts_assets.py',
+    'companion/infrastructure/qwen_assets.py', 'companion/infrastructure/tts_worker.py',
+    'companion/infrastructure/qwen_tts_worker.py',
+)
+
+
+def build_speech_worker_bundle(stage: Path) -> Path:
+    source = stage / 'src'
+    entries = []
+    for name in WORKER_FILES:
+        path = source / name
+        for ancestor in (path, *path.parents):
+            if ancestor == stage:
+                break
+            if (ancestor.is_symlink()
+                    or getattr(ancestor.lstat(), 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                raise ValueError('Linked worker source.')
+        data = path.read_bytes()
+        if len(data) > 128 * 1024:
+            raise ValueError('Unexpected worker source size.')
+        entries.append((name, data))
+    bundle = stage / 'companion-qwen-worker.zip'
+    with zipfile.ZipFile(bundle, 'x', compression=zipfile.ZIP_STORED) as archive:
+        for name, data in entries:
+            info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, data)
+    digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    manifest = source / 'companion/infrastructure/_qwen_worker_manifest.py'
+    manifest.write_text('WORKER_BUNDLE_SHA256 = ' + repr(digest) + '\n', encoding='utf-8')
+    return bundle
+
+
 def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.run,
                    artifact_root: Path | None = None) -> Path:
     root, venv = root.resolve(), venv.resolve()
@@ -92,6 +131,7 @@ def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.r
     stage.resolve().relative_to(artifacts)  # Validate before copying or invoking a tool.
     shutil.copytree(source, stage / 'src', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     shutil.copy2(root / 'pyproject.toml', stage / 'pyproject.toml')
+    worker_bundle = build_speech_worker_bundle(stage)
     output_parent = artifacts / 'dist' / stage.name
     output_parent.resolve().relative_to(artifacts)
     output_parent.mkdir(parents=True, exist_ok=False)
@@ -104,6 +144,8 @@ def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.r
     # Qt 6.11 lacks --no-install. Its documented source skips installation
     # entirely for an empty packages field; preflight requires the tools.
     config['python']['packages'] = ''
+    bundle_option = '--include-data-files=' + worker_bundle.as_posix() + '=companion-qwen-worker.zip'
+    config['nuitka']['extra_args'] += ' ' + shlex.quote(bundle_option)
     config_path = stage / 'pysidedeploy.spec'
     with config_path.open('w', encoding='utf-8') as handle:
         config.write(handle)
