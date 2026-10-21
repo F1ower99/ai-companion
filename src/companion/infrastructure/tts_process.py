@@ -22,14 +22,25 @@ def run_tts_worker(request, token, *, process_factory=subprocess.Popen, monotoni
         raise VoiceOperationError(VoiceErrorCode.CANCELLED)
     if not source_tts_supported():
         raise VoiceOperationError(VoiceErrorCode.NOT_CONFIGURED)
-    payload = json.dumps(request, ensure_ascii=True).encode('ascii')
-    if len(payload) > 16384:
-        raise VoiceOperationError(VoiceErrorCode.SPEECH_FAILED)
     environment = os.environ.copy()
     source = str(Path(__file__).resolve().parents[2])
     environment['PYTHONPATH'] = source + os.pathsep + environment.get('PYTHONPATH', '')
+    return _run_bounded_worker(
+        request, token, command=[sys.executable, '-m', 'companion.infrastructure.tts_worker'],
+        environment=environment, timeout_seconds=90,
+        process_factory=process_factory, monotonic=monotonic,
+    )
+
+
+def _run_bounded_worker(request, token, *, command, environment, timeout_seconds,
+                        process_factory=subprocess.Popen, monotonic=time.monotonic):
+    if token.is_cancelled():
+        raise VoiceOperationError(VoiceErrorCode.CANCELLED)
+    payload = json.dumps(request, ensure_ascii=True).encode('ascii')
+    if len(payload) > 16384:
+        raise VoiceOperationError(VoiceErrorCode.SPEECH_FAILED)
     process = process_factory(
-        [sys.executable, '-m', 'companion.infrastructure.tts_worker'],
+        command,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         shell=False, env=environment,
         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
@@ -69,7 +80,7 @@ def run_tts_worker(request, token, *, process_factory=subprocess.Popen, monotoni
 
     reader = Thread(target=receive, daemon=True)
     writer = Thread(target=send, daemon=True)
-    deadline = monotonic() + 90
+    deadline = monotonic() + timeout_seconds
     try:
         reader.start()
         writer.start()

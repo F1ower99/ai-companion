@@ -104,6 +104,26 @@ python scripts/write_third_party_notices.py --requirement 'PySide6-Essentials==6
 
 `--extra` and `--requirement` are mutually exclusive; development/build extras are excluded unless explicitly selected. Qwen voice experiments use a separate environment and are not part of this app inventory.
 
+## Experimental isolated Qwen speech (Stage 7K)
+
+Kokoro remains the default engine. Source runs can explicitly select the already verified Qwen3-TTS 1.7B CustomVoice candidate using a separate trusted Python environment. It uses Serena and a fixed gentle Chinese style. It is experimental: listening acceptance is pending, and the public short sentence took about 34 seconds end-to-end on this machine. Each explicit Speak starts a fresh owned process; Stop/hide/clear-conversation cancels it. Nothing plays automatically.
+
+For the existing E-drive lab, set these variables only in the shell used to launch the source app:
+
+```powershell
+$env:AI_COMPANION_TTS_ENGINE = 'qwen'
+$env:AI_COMPANION_QWEN_MODEL_DIR = 'E:\AICompanionVoiceLab\models\Qwen3-TTS-12Hz-1.7B-CustomVoice'
+$env:AI_COMPANION_QWEN_PYTHON = 'E:\AICompanionVoiceLab\runtime\Scripts\python.exe'
+$env:AI_COMPANION_QWEN_WORK_DIR = 'E:\AICompanionVoiceLab'
+python -m companion.desktop.app
+```
+
+The desktop needs its existing voice/Qt playback dependency; torch/qwen-tts stay in the separate environment. Paths must already exist on local drives. The exact pinned 13-file model bundle is checked for shape/size before speech and hashes in the child before loading. Cache/temp/bytecode stay under the specified work root, which must be outside the model directory. The selected Python executable is trusted code; choose only your own verified environment. No runtime/model is downloaded or installed by the app.
+
+The child blocks Python socket connections, uses offline/local-only/safetensors loading, requires supported BF16 CUDA and at least 5 GiB free device memory, and never stops other applications or falls back to CPU. Requests remain limited to the existing 200 characters and 60 seconds of output, with a 120-second process limit including hash/import/load time. Longer requests can fail the time bound. No transcript/audio is written to disk. Playback uses the existing Windows output selection; choose your headphones before an explicit audition. Compiled apps remain disabled for this source-only helper. No voice naturalness, packaged runtime or redistribution certification is implied.
+
+Remove `AI_COMPANION_TTS_ENGINE` or set it to `kokoro` to use the existing Kokoro configuration again. Unknown engine, incomplete paths and runtime/model errors fail closed without fallback. [Design](docs/superpowers/specs/2026-10-21-stage-7k-qwen-source-voice-design.md) and [execution evidence](docs/superpowers/tasks/2026-10-21-stage-7k-qwen-source-voice.md).
+
 ## Reply to a reminder locally (Stage 7J)
 
 Saving “启用主动提醒” as off dismisses the current reminder and any pending reply proposal. Disabled reminder evaluations do not load task/reminder state or sample activity. The separate activity-awareness opt-in is preserved; re-enabling reminders evaluates current data again. Pausing activity awareness immediately prevents activity-source sampling and persists independently of the reminder switch.
