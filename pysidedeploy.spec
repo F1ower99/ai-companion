@@ -20,4 +20,4 @@ plugins =
 [nuitka]
 macos.permissions =
 mode = standalone
-extra_args = --msvc=latest --noinclude-qt-translations --include-package=companion
+extra_args = --msvc=latest --windows-console-mode=disable --noinclude-qt-translations --include-package=companion

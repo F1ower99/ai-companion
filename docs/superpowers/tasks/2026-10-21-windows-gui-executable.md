@@ -1,0 +1,9 @@
+# Windows GUI executable correction
+
+Bounded design under existing autonomous approval: retain the standalone toolchain and all runtime behavior; set Nuitka's documented Windows console mode to disable so double-clicking the desktop companion does not create a command window. The first actual artifact had PE subsystem 3 (console), established by parsing its PE header; the headless smoke's CREATE_NO_WINDOW flag hid this packaging defect. Desired artifact uses subsystem 2 (Windows GUI). Source developer execution and isolated worker protocol remain unchanged; compiled TTS remains unsupported.
+
+Plan: change the one deployment option; rebuild in a new E staging directory; parse the resulting actual PE header and repeat the isolated empty-profile startup/integrity/lock smoke. Run full regression and independent review before commit. No mirror test for this reversible configuration edit: the real compiled header and launch are the meaningful verification. Preserve all old outputs, no binary publication, no device use.
+
+Initial evidence: base 3a2e180, executable app.exe from build-y938ur_a, subsystem 3. Validation pending.
+
+Verification: real rebuild exit 0, 90.047 seconds. New E artifact build-dq9kjisr/app.exe SHA-256 `25d6b31a79b72bee4a7582ea51d3e29876577fbd9571cede607f5210dee9c83d`; actual PE subsystem=2. Repeated bounded offscreen launch with **no CREATE_NO_WINDOW or other console suppression flags**. Empty E profile initialized all 16 tables, integrity_check=ok, single-instance lock held, process remained alive then was terminated/reaped. No audio/devices or actual profile used. Full regression **873 passed, 1 skipped** in 15.67 seconds; pip check and diff check pass. Independent code reviewer found no actionable issue. Source configuration only; manual tray/drag/normal-exit and compiled voice remain unaccepted. Local evidence is evidence/standalone-gui-smoke.json; binary remains local, unpublished.
