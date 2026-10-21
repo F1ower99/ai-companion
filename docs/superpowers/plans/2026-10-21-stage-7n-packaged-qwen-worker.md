@@ -28,4 +28,4 @@
 - [x] Explicitly install pinned voice extra only in E build environment if required.
 - [x] Build and verify public no-playback compiled synthesis/cancellation, then app default clean-profile smoke.
 - [x] Independent review, fix, full regression, inspect secret/artifact diff and documentation.
-- [ ] Commit/push under standing authorization.
+- [x] Commit/push under standing authorization: f02369d, remote main readback matched.

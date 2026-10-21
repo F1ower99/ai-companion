@@ -178,6 +178,8 @@ Stage 7L 将现有语音控制器状态映射到桌宠：录音领结提示、�
 
 Stage 7N 为显式 Qwen 增加编译版 worker：构建时生成 9 模块固定 ZIP 并把哈希嵌入暂存源码，运行时仅使用已验证的相邻 ZIP 和单独指定的离线 Python。修复了启动目录同名模块可遮蔽 worker 的问题。真实编译 probe 完成无声公开句子合成和取消回收，GUI 默认关闭启动通过。Kokoro 编译 guard 保留；中文音色、真实麦克风和完整语音交互尚未人工验收。
 
+离线识别打包补验收：修复 PyAV 动态导入缺少 `av.utils`，仅在构建环境安装 STT 时补入该模块和 Whisper 数据。公开英文编译 probe 的识别、预取消和音频清理通过；中文能运行但参考文本不匹配，准确率未通过。包含 STT 的正式 GUI 编译及隔离配置启动通过，完整回归891通过、1跳过。真实麦克风和 GUI 内完整识别仍待体验。原始需求的前台应用/使用时长与语音延期闭环仍未实现，见 `docs/mvp-acceptance-status-2026-10-21.md`，不以 idle 信号替代验收。
+
 **文件：**
 
 - `src/companion/ports/voice.py`、`application/voice_session.py`、`application/voice_synthesis.py`。

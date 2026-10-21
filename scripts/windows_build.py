@@ -146,6 +146,9 @@ def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.r
     config['python']['packages'] = ''
     bundle_option = '--include-data-files=' + worker_bundle.as_posix() + '=companion-qwen-worker.zip'
     config['nuitka']['extra_args'] += ' ' + shlex.quote(bundle_option)
+    if installed_version('faster-whisper'):
+        # PyAV's Cython modules import siblings dynamically (e.g. av.utils).
+        config['nuitka']['extra_args'] += ' --include-module=av.utils --include-package-data=faster_whisper'
     config_path = stage / 'pysidedeploy.spec'
     with config_path.open('w', encoding='utf-8') as handle:
         config.write(handle)

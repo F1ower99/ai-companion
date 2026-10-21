@@ -220,3 +220,20 @@ def test_worker_bundle_rejects_invalid_sources_before_creating_archive(tmp_path,
     with pytest.raises((ValueError, OSError)):
         module.build_speech_worker_bundle(root)
     assert not (root / 'companion-qwen-worker.zip').exists()
+
+
+@pytest.mark.parametrize('stt_installed', [False, True])
+def test_staged_config_covers_optional_pyav_native_imports_without_breaking_base_build(tmp_path, monkeypatch, stt_installed):
+    import configparser, shlex
+    module = load_script('windows_build')
+    root = tmp_path / 'project'; make_project(root)
+    monkeypatch.setattr(module, 'installed_version', lambda name:
+                        '1.2.1' if name == 'faster-whisper' and stt_installed else None)
+    def runner(args, **options):
+        config = configparser.ConfigParser(); config.read(options['cwd'] / 'pysidedeploy.spec')
+        extras = shlex.split(config['nuitka']['extra_args'])
+        assert ('--include-module=av.utils' in extras) is stt_installed
+        assert ('--include-package-data=faster_whisper' in extras) is stt_installed
+        assert any(option.endswith('=companion-qwen-worker.zip') for option in extras)
+        return subprocess.CompletedProcess(args, 0)
+    module.run_deployment(root, tmp_path / 'venv', dry_run=True, runner=runner)
