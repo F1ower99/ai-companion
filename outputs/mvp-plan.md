@@ -158,7 +158,7 @@ Stage 3 已完成旧阶段号里的决策与延期模型；Stage 6 实现仅凭�
 
 Stage 7A 已实现 provider-neutral 本地语音会话基础：PCM/转写校验、local-only ports、取消/打断及迟到结果隔离，Qt 转写只交接到空草稿。后续 7C–7G 已接入本地识别、受限采集和显式朗读；默认不配置模型时语音保持关闭。云端语音不属于当前批准范围。
 
-Stage 7B 已建立 standalone 配置、无删除的构建入口、独立构建目录和依赖许可元数据清单。当前环境缺少 MSVC 与构建依赖，preflight 已正确阻止构建；未生成 exe，部署 dry-run 与真实打包/启动验收均未完成。说明见 README；临时 LOCALAPPDATA 不能隔离 Credential Manager，凭据验收需要单独 Windows 测试账号。
+Stage 7B 已建立 standalone 配置、无删除的构建入口、独立构建目录和依赖许可元数据清单。Stage 7M 已发现并激活现有 MSVC，使用 E 盘隔离环境通过真实 preflight、dry-run、standalone 编译与离屏启动检查；新建数据库完整性和实例锁均通过。手动托盘/拖动/正常退出及编译包语音仍待验收，尚未发布二进制。说明见 README；临时 LOCALAPPDATA 不能隔离 Credential Manager，凭据验收需要单独 Windows 测试账号。
 
 Stage 7C 已按用户选择的离线模型方向实现可选 faster-whisper CPU/int8 识别适配器和受限 WAV smoke 工具；Whisper base 的固定发布版本与文件哈希已核验。公开英文样例已通过离线识别；中文样例已实际运行但有明显识别错误，尚未验收。WAV 工具的奇数尾字节问题已修复并通过回归测试。真实测试记录见 `docs/offline-stt-assets-2026-10-18.md`。
 

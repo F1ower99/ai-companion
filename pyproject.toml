@@ -22,6 +22,7 @@ deploy = [
     "Nuitka==4.1.1",
     "ordered-set>=4,<5",
     "zstandard>=0.23,<1",
+    "tomli>=2,<3; python_version < '3.11'",
 ]
 voice = [
     "PySide6-Addons==6.11.2",

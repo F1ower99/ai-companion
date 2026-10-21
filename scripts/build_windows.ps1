@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$VenvPath = (Join-Path $PSScriptRoot '..\.venv'),
+    [string]$ArtifactRoot,
     [switch]$PreflightOnly,
     [switch]$DryRun
 )
@@ -10,6 +11,7 @@ if (-not (Test-Path -LiteralPath $pythonExe -PathType Leaf)) {
     throw "Missing virtual environment Python: $pythonExe. Create .venv and install .[dev,deploy], or pass -VenvPath."
 }
 $buildArgs = @((Join-Path $PSScriptRoot 'windows_build.py'), '--venv-path', $VenvPath)
+if ($ArtifactRoot) { $buildArgs += @('--artifact-root', $ArtifactRoot) }
 if ($PreflightOnly) { $buildArgs += '--preflight-only' }
 if ($DryRun) { $buildArgs += '--dry-run' }
 & $pythonExe @buildArgs

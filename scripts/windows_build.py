@@ -7,6 +7,7 @@ from importlib import metadata
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -19,7 +20,8 @@ def installed_version(name: str) -> str | None:
         return None
 
 
-def check_prerequisites(venv: Path, platform_name=sys.platform, which=shutil.which, version=installed_version) -> list[str]:
+def check_prerequisites(venv: Path, platform_name=sys.platform, which=shutil.which,
+                        version=installed_version, python_version=sys.version_info[:2]) -> list[str]:
     problems = []
     if platform_name != 'win32':
         problems.append('Windows is required for this build.')
@@ -35,23 +37,63 @@ def check_prerequisites(venv: Path, platform_name=sys.platform, which=shutil.whi
         found = version(package)
         if not found or (required and found != required):
             problems.append(f'Missing/incompatible {package}{"==" + required if required else ""}; install .[dev,deploy] explicitly.')
+    if python_version < (3, 11) and not version('tomli'):
+        problems.append('Missing tomli for Qt deployment on Python < 3.11; install .[deploy] explicitly.')
     return problems
 
 
-def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.run) -> Path:
+def _artifact_directory(root: Path, explicit: Path | None) -> Path:
+    if explicit is None:
+        return root
+    path = Path(explicit)
+    try:
+        if not path.is_absolute() or not _local_artifact_drive(path):
+            raise ValueError('Local absolute path required.')
+        # Inspect top-down so a linked parent cannot redirect later probes.
+        for ancestor in reversed((path, *path.parents)):
+            if (ancestor.is_symlink()
+                    or getattr(ancestor.lstat(), 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT):
+                raise ValueError('Linked ancestor.')
+        if not path.is_dir():
+            raise ValueError('Directory required.')
+        path = path.resolve(strict=True)
+        if not _local_artifact_drive(path):
+            raise ValueError('Resolved network path.')
+    except (OSError, ValueError):
+        raise ValueError('Artifact root must be an existing absolute local directory without links.') from None
+    if (path.is_relative_to(root / 'src')
+            or any(part.casefold() == '.git' for part in path.parts)):
+        raise ValueError('Artifact root must be outside source and Git metadata.')
+    return path
+
+
+def _local_artifact_drive(path: Path) -> bool:
+    if str(path).startswith(('\\\\', '//')):
+        return False
+    if sys.platform != 'win32':
+        return True
+    import ctypes
+    reader = ctypes.WinDLL('kernel32', use_last_error=True).GetDriveTypeW
+    reader.argtypes, reader.restype = [ctypes.c_wchar_p], ctypes.c_uint
+    return reader(path.anchor) in (2, 3, 6)
+
+
+def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.run,
+                   artifact_root: Path | None = None) -> Path:
     root, venv = root.resolve(), venv.resolve()
     source = root / 'src'
     if not source.is_dir() or any(path.is_symlink() for path in source.rglob('*')):
         raise ValueError('Build source must be an existing tree without symlinks.')
-    build_root = root / 'build' / 'windows'
-    build_root.resolve().relative_to(root)
+    artifacts = _artifact_directory(root, artifact_root)
+    build_root = artifacts / 'build' / 'windows'
+    build_root.resolve().relative_to(artifacts)
     build_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix='build-', dir=build_root))
-    stage.resolve().relative_to(root)  # Validate before copying or invoking a tool.
+    stage.resolve().relative_to(artifacts)  # Validate before copying or invoking a tool.
     shutil.copytree(source, stage / 'src', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
     shutil.copy2(root / 'pyproject.toml', stage / 'pyproject.toml')
-    output_parent = root / 'dist' / stage.name
-    output_parent.resolve().relative_to(root)
+    output_parent = artifacts / 'dist' / stage.name
+    output_parent.resolve().relative_to(artifacts)
     output_parent.mkdir(parents=True, exist_ok=False)
     config = configparser.ConfigParser()
     config.read(root / 'pysidedeploy.spec', encoding='utf-8')
@@ -69,7 +111,12 @@ def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.r
     if dry_run:
         args.append('--dry-run')
     environment = os.environ.copy()
-    environment.update(VIRTUAL_ENV=str(venv), PYTHONPATH=str(stage / 'src'), PIP_NO_INDEX='1', PIP_DISABLE_PIP_VERSION_CHECK='1', NUITKA_CACHE_DIR=str(stage / 'nuitka-cache'))
+    temporary = stage / 'tmp'
+    temporary.mkdir()
+    environment.update(VIRTUAL_ENV=str(venv), PYTHONPATH=str(stage / 'src'), PIP_NO_INDEX='1',
+                       PIP_DISABLE_PIP_VERSION_CHECK='1', NUITKA_CACHE_DIR=str(stage / 'nuitka-cache'),
+                       TEMP=str(temporary), TMP=str(temporary),
+                       PYTHONPYCACHEPREFIX=str(stage / 'python-cache'))
     result = runner(args, cwd=stage, env=environment, shell=False, stdin=subprocess.DEVNULL, check=False)
     if result.returncode:
         raise RuntimeError(f'Deployment exited {result.returncode}; retained work: {stage}')
@@ -84,6 +131,7 @@ def run_deployment(root: Path, venv: Path, *, dry_run: bool, runner=subprocess.r
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--venv-path', type=Path, required=True)
+    parser.add_argument('--artifact-root', type=Path)
     parser.add_argument('--preflight-only', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
@@ -98,7 +146,8 @@ def main() -> int:
         print('Build preflight passed; no build started.')
         return 0
     try:
-        run_deployment(Path(__file__).parents[1], args.venv_path, dry_run=args.dry_run)
+        run_deployment(Path(__file__).parents[1], args.venv_path, dry_run=args.dry_run,
+                       artifact_root=args.artifact_root)
     except (OSError, ValueError, RuntimeError) as error:
         print(f'Build failed: {error}', file=sys.stderr)
         return 1

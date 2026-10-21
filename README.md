@@ -68,11 +68,13 @@ python -m pip install -e ".[dev,deploy]"
 .\scripts\build_windows.ps1
 ```
 
+To place staging, compiler cache, temporary files and standalone output on another local drive, create the destination first and pass `-ArtifactRoot 'E:\AICompanionVoiceLab\build-lab'`. Linked directories, network drives and source/Git metadata destinations are rejected. Python <3.11 additionally requires the declared `tomli` deploy dependency.
+
 For an existing shared environment, add `-VenvPath 'C:\path with spaces\to\.venv'`. The wrapper checks the pinned Qt/Nuitka versions and prerequisites before creating output. It stages code in a fresh ignored `build/windows/build-<id>` directory, keeps compiler files, and reports the standalone folder `dist/build-<id>/AICompanion.dist` with `app.exe`. Prior output is retained. The Qt 6.11.2 tool has no `--no-install`; an empty package-install list plus preflight prevents implicit dependency installation. The wrapper supplies no download confirmation and never installs MSVC. Invoke the wrapper rather than running the checked-in spec directly.
 
 Regenerate the runtime metadata inventory with `python scripts/write_third_party_notices.py`. `THIRD_PARTY_NOTICES.md` records verified installed versions and declared licenses, including missing metadata flags. It is not a complete redistribution package: Python, native Qt components/plugins, applicable LGPL/GPL license texts and release obligations still need review. The installed wheels currently list a commercial-license file while declaring LGPL/GPL alternatives; review and include the selected applicable texts before redistribution.
 
-No executable has been produced on this development machine: preflight currently reports missing MSVC `cl`/`dumpbin` and deployment packages. Automated tests cover the wrapper and controlled build inputs; neither a deployment dry run nor a real build nor manual packaged launch is claimed passed.
+Stage 7M passed a real Windows preflight, deployment dry run and standalone build using the existing Visual Studio 2022 toolchain and isolated E-drive build environment. The compiled executable passed a headless startup smoke with a fresh E-drive profile, initialized SQLite with integrity_check=ok, and held its single-instance lock. The owned process was terminated/reaped after this check; manual tray/drag/normal-exit behavior and packaged voice are not thereby accepted. Build evidence and limits are recorded in [the execution record](docs/superpowers/tasks/2026-10-21-stage-7m-windows-build-validation.md). No binary release has been published.
 
 After a successful build, use a temporary data profile for pet/tasks/reminders/tray smoke checks:
 
