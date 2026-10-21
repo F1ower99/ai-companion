@@ -15,9 +15,10 @@ _SUMMARIES = {
 
 
 class ReminderReplyDialog(QDialog):
-    def __init__(self, task_title, apply_proposal, parent=None):
+    def __init__(self, task_title, apply_proposal, parent=None, *, draft_source=None):
         super().__init__(parent, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.apply_proposal = apply_proposal
+        self._draft_source = draft_source
         self._proposal, self._active, self._busy = None, False, False
         self.setWindowTitle('回复这条提醒')
         self.setFixedWidth(360)
@@ -52,6 +53,16 @@ class ReminderReplyDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(title)
         layout.addLayout(entry)
+        self.draft_button = None
+        if draft_source is not None:
+            self.draft_button = QPushButton('填入聊天草稿')
+            self.draft_button.setAutoDefault(False)
+            self.draft_button.setDefault(False)
+            self.draft_button.clicked.connect(self._fill_from_draft)
+            help_label = QLabel('可先在聊天中按住说话，再填入草稿；不会发送或自动执行。')
+            help_label.setWordWrap(True)
+            layout.addWidget(self.draft_button)
+            layout.addWidget(help_label)
         layout.addWidget(self.preview_label)
         layout.addWidget(self.status_label)
         layout.addLayout(actions)
@@ -79,6 +90,26 @@ class ReminderReplyDialog(QDialog):
         # clear() is undoable; setText resets undo history as well as contents.
         self.reply_input.setText('')
         self._changed()
+
+    def _fill_from_draft(self):
+        if not self._active or not self.isVisible() or self._busy or self._draft_source is None:
+            return
+        if self.reply_input.text():
+            self.status_label.setText('已保留当前回复；清空后可填入聊天草稿。')
+            return
+        try:
+            draft = self._draft_source()
+        except Exception:
+            self.status_label.setText('聊天草稿暂时不可用，请手动输入。')
+            return
+        # The callback may run application code; recheck lifetime and edits.
+        if not self._active or not self.isVisible() or self._busy or self.reply_input.text():
+            return
+        if not isinstance(draft, str) or not 1 <= len(draft) <= 128 or not draft.strip():
+            self.status_label.setText('请准备 1 到 128 字的明确回复，再预览确认。')
+            return
+        self.reply_input.setText(draft)
+        self.status_label.setText('已填入草稿；请先预览，再确认。聊天草稿保持不变。')
 
     def _preview(self):
         if not self._active or not self.isVisible() or self._busy:

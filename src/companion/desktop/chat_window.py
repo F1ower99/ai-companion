@@ -737,7 +737,8 @@ class ChatWindow(QDialog):
         if self.reminder_card is not None and self.reminder_card.isVisible():
             self.reminder_card.dismiss()
         try:
-            card = ReminderCard(self.task_service, self.reminder_service, decision)
+            card = ReminderCard(self.task_service, self.reminder_service, decision,
+                                draft_source=self.composer.toPlainText)
         except Exception:
             return
         self.reminder_card = card

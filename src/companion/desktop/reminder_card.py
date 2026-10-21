@@ -45,13 +45,14 @@ class ReminderCard(QDialog):
     decisionReady = Signal(object)
     actionFailed = Signal(str)
 
-    def __init__(self, task_service, reminder_service, decision: Decision, parent=None) -> None:
+    def __init__(self, task_service, reminder_service, decision: Decision, parent=None, *, draft_source=None) -> None:
         super().__init__(parent, Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint
                          | Qt.WindowType.WindowDoesNotAcceptFocus)
         if decision.kind is not DecisionKind.SHOW_REMINDER:
             raise ValueError("ReminderCard requires a SHOW_REMINDER decision.")
         self.task_service = task_service
         self.reminder_service = reminder_service
+        self._draft_source = draft_source
         self.decision = decision
         self._close_without_action = False
         self._busy = False
@@ -157,7 +158,8 @@ class ReminderCard(QDialog):
         if self._busy or self._close_without_action or not self.isVisible():
             return
         if self.reply_dialog is None:
-            self.reply_dialog = ReminderReplyDialog(self.task.title, self._apply_reply, self)
+            self.reply_dialog = ReminderReplyDialog(self.task.title, self._apply_reply, self,
+                                                    draft_source=self._draft_source)
         if self.reply_dialog.isVisible():
             self.reply_dialog.raise_()
             self.reply_dialog.activateWindow()
